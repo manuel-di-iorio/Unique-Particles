@@ -11,8 +11,10 @@ The engine is built on four core architectural pillars:
 
 1. **Analytical GPU Trajectory**: The CPU never calculates positions. It only writes "Birth Data" (Spawn Time, Initial Velocity, etc.) to a buffer. The Vertex Shader solves the motion equation `p = p0 + v0*t + 0.5*a*t^2` in real-time.
 2. **Circular Persistent Buffers**: Instead of rebuilding the vertex buffer every frame, the system uses a circular pool. For each particle, GML writes 6 vertices **only once** at spawn. From that point on, the GPU takes over.
-3. **Age-Based Auto-Discard**: There is no CPU-side "killing" of particles. The shader compares `uTime - spawnTime`. if it exceeds `maxLife`, the vertex is discarded (`gl_Position = vec4(0.0)`), resulting in zero processing for dead particles.
-4. **Lightweight Vertex Layout (52 Bytes)**: To maximize bandwidth, we use a hybrid approach. Persistent per-particle data (Position, Velocity, Birth Time) is in the vertices, while shared emitter data (Gravity, Size/Color Transitions) is passed via **Uniforms**.
+3. **Zero-Allocation Memory Model**: Using a fixed-size `buffer_fixed` and pre-allocated arrays, the system performs **zero runtime allocations**. This eliminates the possibility of memory fragmentation or sudden GC spikes.
+4. **Z-Up 3D Coordinate System**: Designed specifically for 3D GameMaker environments. All physics and billboarding logic assume a Z-Up coordinate system, making it perfect for modern 3D titles.
+5. **Age-Based Auto-Discard**: There is no CPU-side "killing" of particles. The shader compares `uTime - spawnTime`. If it exceeds `maxLife`, the vertex is discarded (`gl_Position = vec4(0.0)`), resulting in zero processing for dead particles.
+6. **Lightweight Vertex Layout (52 Bytes)**: To maximize bandwidth, we use a hybrid approach. Persistent per-particle data (Position, Velocity, Birth Time) is in the vertices, while shared emitter data (Gravity, Size/Color Transitions) is passed via **Uniforms**.
 
 ---
 
@@ -97,13 +99,17 @@ mySystem.render(camera);
 ### Circular Write-Once Strategy
 The system uses the `vertex_create_buffer_from_buffer` approach to push data from a raw CPU buffer to the GPU. This update only happens if a new particle was spawned, ensuring that static emitters cost **zero CPU** on the draw call.
 
-### Analytical Culling
-The `cullingRadius` is not a guess. It is calculated using the physical limits of the particle type:
+### Analytical Frustum Culling
+Instead of a simple bounding box, the system calculates a **Dynamic Culling Sphere**. The radius is determined analytically using the physical limits of the particle type:
 `Radius = ShapeSize + (MaxSpeed * MaxLife + 0.5 * Gravity * MaxLife^2)`
-This ensures perfect visibility checks with `sphere_is_visible`.
+This ensures 100% accurate visibility checks. The system then leverages GameMaker's native `sphere_is_visible` function, which is highly optimized and much faster than manual CPU-side frustum extraction and plane intersection.
 
-### Distance LOD
-Automatic emission scaling based on distance. Far emitters will spawn fewer particles, significantly reducing overdraw and buffer updates without affecting the "density" of the scene.
+### Soft Particles (Ground Fading)
+To prevent ugly "sharp edges" when particles intersect with the ground (Z=0), the engine implements **GPU-side Ground Softness**.
+The shader calculates the distance of each vertex from the ground plane and fades the alpha transparency accordingly. This creates a smooth, volumetric look for fire, smoke, and dust when hitting the floor.
+
+### Distance LOD (Level of Detail)
+Automatic emission scaling based on camera distance. Far emitters will automatically spawn fewer particles, significantly reducing overdraw and GPU fill-rate pressure without affecting the "volumetric feel" of the near-field scene.
 
 ---
 Developed with ❤️ by Emmanuel Di Iorio - MIT License
