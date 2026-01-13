@@ -1,4 +1,4 @@
-global.UE_PARTICLE_RENDERER_VERSION = "0.0.3";
+global.UE_PARTICLE_RENDERER_VERSION = "0.0.1";
 
 /**
  * @description Advanced particle renderer with texture batching and procedural shapes.
@@ -11,6 +11,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
   vertex_format_add_position_3d();
   vertex_format_add_colour();     
   vertex_format_add_custom(vertex_type_float2, vertex_usage_texcoord);
+  vertex_format_add_custom(vertex_type_float3, vertex_usage_texcoord); // Velocity (vx, vy, vz)
   self.format = vertex_format_end();
 
   self.vbuffer = vertex_create_buffer();
@@ -22,6 +23,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
   self.uUp = shader_get_uniform(self.shader, "u_ueCameraUp");
   self.uUVRegion = shader_get_uniform(self.shader, "u_ueUVRegion");
   self.uTime = shader_get_uniform(self.shader, "u_ueTime");
+  self.uInterpolation = shader_get_uniform(self.shader, "u_ueInterpolation");
 
   static _vmCache = array_create(16, 0);
 
@@ -91,7 +93,8 @@ function UeParticleRenderer(_shaders = {}) constructor {
         var t = texture_get_uvs(tex);
         _uvs = [t[0], t[1], t[2]-t[0], t[3]-t[1]];
     }
-    array_push(self.renderQueue, { pool: pool, camera: camera, texture: tex, uvs: _uvs });
+    var interp = (pool[$ "emitter"] != undefined) ? pool.emitter._dtAccumulator : 0;
+    array_push(self.renderQueue, { pool: pool, camera: camera, texture: tex, uvs: _uvs, interpolation: interp });
   }
 
   function flush() {
@@ -136,6 +139,10 @@ function UeParticleRenderer(_shaders = {}) constructor {
           var pX = pool.posX, pY = pool.posY, pZ = pool.posZ;
           var pS = pool.size, pR = pool.rot, pA = pool.alpha;
           var cR = pool.colorR, cG = pool.colorG, cB = pool.colorB;
+          
+          // Velocity components for interpolation
+          var vX = pool.dirX, vY = pool.dirY, vS = pool.speed, vZ = pool.zSpeed;
+          var pVX = pool.velX, pVY = pool.velY, pVZ = pool.velZ;
 
           for (var j = 0; j < pCount; j++) {
               var idx = active[j];
@@ -143,12 +150,17 @@ function UeParticleRenderer(_shaders = {}) constructor {
               var rb = floor(cR[idx]*255)&~1, g = floor(cG[idx]*255), bb = floor(cB[idx]*255)&~1;
               var c0 = rb|(g<<8)|(bb<<16), c1 = (rb|1)|(g<<8)|(bb<<16), c2 = (rb|1)|(g<<8)|((bb|1)<<16), c3 = rb|(g<<8)|((bb|1)<<16);
               
-              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c0, a); vertex_float2(self.vbuffer, s, rot);
-              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c1, a); vertex_float2(self.vbuffer, s, rot);
-              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c2, a); vertex_float2(self.vbuffer, s, rot);
-              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c2, a); vertex_float2(self.vbuffer, s, rot);
-              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c3, a); vertex_float2(self.vbuffer, s, rot);
-              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c0, a); vertex_float2(self.vbuffer, s, rot);
+              // Calculate total instantaneous velocity
+              var vx = (vX[idx] * vS[idx] + pVX[idx]);
+              var vy = (vY[idx] * vS[idx] + pVY[idx]);
+              var vz = (vZ[idx] + pVZ[idx]);
+
+              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c0, a); vertex_float2(self.vbuffer, s, rot); vertex_float3(self.vbuffer, vx, vy, vz);
+              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c1, a); vertex_float2(self.vbuffer, s, rot); vertex_float3(self.vbuffer, vx, vy, vz);
+              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c2, a); vertex_float2(self.vbuffer, s, rot); vertex_float3(self.vbuffer, vx, vy, vz);
+              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c2, a); vertex_float2(self.vbuffer, s, rot); vertex_float3(self.vbuffer, vx, vy, vz);
+              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c3, a); vertex_float2(self.vbuffer, s, rot); vertex_float3(self.vbuffer, vx, vy, vz);
+              vertex_position_3d(self.vbuffer, _x, _y, z); vertex_color(self.vbuffer, c0, a); vertex_float2(self.vbuffer, s, rot); vertex_float3(self.vbuffer, vx, vy, vz);
           }
       }
       vertex_end(self.vbuffer);
@@ -158,6 +170,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
       shader_set_uniform_f_array(self.uUVRegion, first.uvs);
       shader_set_uniform_f(self.uRight, _vmCache[0], _vmCache[4], _vmCache[8]);
       shader_set_uniform_f(self.uUp, _vmCache[1], _vmCache[5], _vmCache[9]);
+      shader_set_uniform_f(self.uInterpolation, first.interpolation);
       
       var b = gpu_get_blendenable(), zw = gpu_get_zwriteenable(), zt = gpu_get_ztestenable();
       gpu_set_blendenable(true); gpu_set_ztestenable(true); gpu_set_zwriteenable(false);

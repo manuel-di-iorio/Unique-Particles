@@ -18,6 +18,7 @@ The system was designed with a zero-overhead approach. Here are the key optimiza
 - **View Matrix Caching**: 3D billboarding optimization through view matrix caching.
 - **Distance-based LOD**: Automatic reduction of emission rates and update frequency based on distance to camera.
 - **Update Skipping**: Far away emitters skip animation frames but accumulate delta time to save CPU without losing positional accuracy.
+- **GPU Extrapolation**: The shader uses particle velocity to smoothly interpolate movement during skipped frames, ensuring 60 FPS visual fluidity even with 10 FPS logic updates.
 - **Native Frustum Culling**: Automatic skipping of invisible emitters using `sphere_is_visible`.
 - **Forceinline**: Systematic use of `gml_pragma("forceinline")` to eliminate function call overhead.
 
@@ -80,11 +81,14 @@ Emitters can automatically scale their emission rate based on distance to the ca
 ```gml
 emitter.lodDistances = [500, 1000]; // Pixels
 emitter.lodRates = [1.0, 0.5, 0.1]; // 100% rate, 50% rate, 10% rate
-emitter.lodSkips = [0, 1, 3]; // Skip 0 frames, skip 1 frame, skip 3 frames
+emitter.lodSkips = [1, 2, 4]; // Even at LOD 0, we skip 1 frame to save CPU
 ```
 
-### Update Skipping
-When an emitter skips an update, it accumulates the `delta_time`. When it finally updates, it processes the movement for the entire elapsed time. This saves CPU while keeping the average movement correct.
+### Update Skipping & GPU Extrapolation
+When an emitter skips an update via LOD, it accumulates the `delta_time`. The **UeParticleRenderer** automatically passes this accumulated time and the particle's velocity to the vertex shader. The shader then performs a linear extrapolation:
+`final_pos = position + velocity * accumulated_time`
+
+This allows far-away effects to run at very low CPU frequencies (e.g., 15 FPS) while appearing perfectly smooth (60 FPS) to the player.
 
 ### Frustum Culling
 The system uses GameMaker's native `sphere_is_visible` to cull entire emitters before processing. The culling radius is automatically estimated based on particle speed, life, and gravity, but can be set manually:

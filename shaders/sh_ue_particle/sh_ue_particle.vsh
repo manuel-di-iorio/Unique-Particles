@@ -1,11 +1,13 @@
 attribute vec3 in_Position;      // Center position
 attribute vec4 in_Colour;        // Color + corner id bits (packed in R and B)
 attribute vec2 in_TextureCoord;  // size, rotation
+attribute vec3 in_Velocity;      // Instantaneous velocity (vx, vy, vz)
 
 uniform vec3 u_ueCameraRight;
 uniform vec3 u_ueCameraUp;
 uniform vec4 u_ueUVRegion;       // [x, y, w, h]
 uniform float u_ueTime;
+uniform float u_ueInterpolation; // Time since last CPU update
 
 varying vec2 v_vTexcoord;
 varying vec4 v_vColour;
@@ -49,7 +51,10 @@ void main() {
         corner.x * s + corner.y * c
     );
 
-    vec3 worldPos = in_Position + 
+	// Apply GPU Extrapolation
+    vec3 animatedPos = in_Position + in_Velocity * u_ueInterpolation;
+
+    vec3 worldPos = animatedPos + 
                    (u_ueCameraRight * rc.x + 
                     u_ueCameraUp    * rc.y) * size;
 

@@ -5,6 +5,7 @@
 function UeParticleEmitter(maxParticles = 1000) constructor {
   gml_pragma("forceinline");
   self.pool = new UeParticlePool(maxParticles);
+  self.pool.emitter = self;
 
   // Emission state
   self.streamType = undefined;
@@ -15,7 +16,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
   // LOD & Culling
   self.lodDistances = [500, 1000]; // threshold distances for LOD
   self.lodRates = [1.0, 0.5, 0.1]; // emission rate multipliers at each distance
-  self.lodSkips = [0, 1, 2]; // frames to skip at each LOD level (0=none, 1=every other frame, etc)
+  self.lodSkips = [1, 2, 4]; // frames to skip at each LOD level (1=every other frame, etc)
   self.lodLevel = 0; // Current index in the LOD arrays
   self._skipCounter = 0;
   self._dtAccumulator = 0;
