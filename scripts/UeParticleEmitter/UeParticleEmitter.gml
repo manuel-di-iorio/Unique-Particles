@@ -15,6 +15,8 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   self.vbuffer = vertex_create_buffer_from_buffer(self.rawBuffer, self.vformat);
   self.writePointer = 0;         // Index for circular writing
   self.spawnedAny = false;       // Flag to trigger GPU buffer update
+  self.firstOffset = 0;          // Start of modified range
+  self.lastOffset = 0;           // End of modified range
 
   // --- Emission State ---
   self.streamType = undefined;
@@ -131,7 +133,14 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
 
     // --- Circular Write (O(1)) ---
     var b = self.rawBuffer;
-    var offset = self.writePointer * 6 * self.vsize;
+    var pSize = 6 * self.vsize;
+    var offset = self.writePointer * pSize;
+    
+    if (!self.spawnedAny) {
+        self.firstOffset = offset;
+        self.spawnedAny = true;
+    }
+    
     buffer_seek(b, buffer_seek_start, offset);
     
     // Corners: TL, TR, BL, BL, TR, BR (Triangle List 6 verts)
@@ -147,7 +156,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     }
     
     self.writePointer = (self.writePointer + 1) % self.maxParticles;
-    self.spawnedAny = true;
+    self.lastOffset = self.writePointer * pSize;
     self.pool.aliveCount = self.maxParticles; 
     return self.writePointer;
   }
@@ -169,7 +178,13 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
    */
   static render = function (camera) {
     if (self.spawnedAny) {
-        vertex_update_buffer_from_buffer(self.vbuffer, 0, self.rawBuffer);
+        if (self.lastOffset > self.firstOffset) {
+            // Update solo la porzione modificata
+            vertex_update_buffer_from_buffer(self.vbuffer, self.firstOffset, self.rawBuffer, self.firstOffset, self.lastOffset - self.firstOffset);
+        } else {
+            // Wrap: Update tutto (per semplicitá e velocitá)
+            vertex_update_buffer_from_buffer(self.vbuffer, 0, self.rawBuffer);
+        }
         self.spawnedAny = false;
     }
     if (self.vbuffer == undefined || self.streamType == undefined) return;
