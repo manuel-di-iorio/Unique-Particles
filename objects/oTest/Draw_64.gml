@@ -5,9 +5,9 @@ var totalAlive = 0;
 var yy = 10;
 var emitters = particleSystem.emitters;
 
-for (var i = 0; i < array_length(emitters); i++) {
+for (var i = 0, il = array_length(emitters); i < il; i++) {
     var e = emitters[i];
-    var count = e.pool.aliveCount;
+    var count = round(e.pool.aliveCount);
     totalAlive += count;
     draw_text(10, yy, "Emitter " + string(i) + ": " + string(count) + " particles");
     yy += 20;

@@ -29,6 +29,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   self.shape = "point";
   self.visible = true;
   self.pool = { aliveCount: 0 }; 
+  self.totalSpawned = 0;
 
   // --- LOD & Culling settings ---
   self.lodDistances = [500, 1000];
@@ -161,7 +162,11 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     
     self.writePointer = (self.writePointer + 1) % self.maxParticles;
     self.lastOffset = self.writePointer * pSize;
-    self.pool.aliveCount = self.maxParticles; 
+    
+    // Statistical increment
+    self.pool.aliveCount = min(self.pool.aliveCount + 1, self.maxParticles);
+    self.totalSpawned++;
+    
     return self.writePointer;
   }
 
@@ -178,7 +183,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   }
 
   /**
-   * @description Handles periodic emission logic and update skipping for LOD.
+   * @description Handles periodic emission logic and statistically updates aliveCount.
    * @param {real} dt Seconds elapsed since last update.
    */
   static update = function (dt) {
@@ -186,13 +191,22 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
       self._accumulator += dt * self.streamRate * self.lodRates[self.lodLevel];
       while (self._accumulator >= 1) { self.spawn(self.streamType); self._accumulator--; }
     }
+
+    // Statistical Decay: O(1) estimation of alive particles
+    if (self.pool.aliveCount > 0 && self.streamType != undefined) {
+        var decayRate = self.pool.aliveCount / self.streamType.avgLife;
+        self.pool.aliveCount -= decayRate * dt;
+        if (self.pool.aliveCount < 0.05) self.pool.aliveCount = 0;
+    }
   }
 
   /**
    * @description Submits the emitter's internal GPU buffer for drawing if not culled.
    * @param {resource.camera} camera Camera for billboard extraction.
+   * @param {texture} depthTex Optional depth texture.
+   * @param {array} depthParams [near, far, softness]
    */
-  static render = function (camera) {
+  static render = function (camera, depthTex = undefined, depthParams = undefined) {
     if (self.isDestroyed) return;
     if (self.spawnedAny) {
         if (self.lastOffset > self.firstOffset) {
@@ -205,7 +219,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
         self.spawnedAny = false;
     }
     if (self.vbuffer == undefined || self.streamType == undefined) return;
-    global.UE_PARTICLE_RENDERER.submit(self, camera, self.streamType);
+    global.UE_PARTICLE_RENDERER.submit(self, camera, self.streamType, depthTex, depthParams);
   }
 
   /**
@@ -218,6 +232,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     self.spawnedAny = true; 
     self.firstOffset = 0;
     self.lastOffset = 0;
+    self.pool.aliveCount = 0;
     return self;
   }
 

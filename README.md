@@ -29,8 +29,11 @@ Unique Particles is a state-of-the-art particle system that offloads 100% of par
 - **`.setDrag(value)`**: Air resistance (0-1). Slows down particles over time.
 - **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
 - **`.setGravity(amountZ, [amountXY], [dirXY])`**: Constant gravity applied to particles.
-- **`.setColor(color1, [color2])`**: Start and end color (interpolation handled by GPU).
-- **`.setAlpha(alpha1, [alpha2])`**: Start and end transparency.
+#### 🎨 Visuals & Physics
+- `.setColor(c1, [c2], [c3], [midTime])`: Set 2-way or 3-way color gradient
+- `.setAlpha(a1, [a2])`: Set start and end transparency.
+- `.setGlow(intensity)`: Set emissive intensity for HDR/Bloom
+- `.setAnimation(xFrames, yFrames, speed)`: Configure flipbook sprite animation
 - **`.setAdditive(bool)`**: Enables additive blend mode.
 - **`.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
 - **`.setShape(name)`**: Uses a pre-defined procedural shape.
@@ -50,7 +53,21 @@ The engine automatically generates procedural textures for common effects:
 
 ---
 
-## 🚀 Quick Start
+## 🏗️ UeParticleSystem API
+
+`UeParticleSystem` manages multiple emitters and handles global rendering, LOD, and culling.
+
+- **`.addEmitter(emitter)`**: Adds an emitter to the system.
+- **`.update([dt], [cx], [cy], [cz])`**: Updates all emitters.
+- **`.render([camera], [depthTex], [softness], [near], [far])`**: Renders all visible emitters.
+    - `camera`: Camera resource (defaults to `view_camera[0]`).
+    - `depthTex`: Optional depth texture for **Soft Particles** (e.g., from `surface_get_texture_depth`).
+    - `softness`: Strength of depth blending (default 100).
+    - `near`/`far`: Camera clipping planes for depth linearization.
+- **`.burst(count)`**: Bursts particles on all emitters with a stream type.
+- **`.clear()`**: Resets all emitters.
+
+---
 
 ### 1. Simple Configuration
 ```gml
@@ -93,11 +110,14 @@ The engine is built on high-performance architectural pillars designed for moder
 - **Circular Persistent Buffers**: Uses a `vertex_update_buffer_from_buffer` approach. GML writes vertex data **only once** at spawn. Static emitters cost **zero CPU** on the draw call.
 - **Zero-Allocation Model**: Uses fixed-size buffers and pre-allocated arrays, eliminating runtime allocations, memory fragmentation, and GC spikes.
 - **Lightweight Layout (52 Bytes)**: To maximize bandwidth, only per-particle data is in vertices, while shared emitter data is passed via **Uniforms**.
+- **Differential Buffer Uploading**: Only modified vertices are sent to the GPU, minimizing PCIe bandwidth.
 
 ### 📐 3D & Visuals
 - **Z-Up 3D System**: Designed specifically for 3D GameMaker environments with Z-up coordinates.
+- **Color Curves**: Support for 3-way color gradients (Start -> Mid -> End) for complex transitions.
+- **Flipbook Animation**: GPU-side sprite sheet animation support.
+- **Emissive Glow**: Intensity control for HDR-ready glowing effects.
 - **Analytical Frustum Culling**: Calculates a **Dynamic Culling Sphere** using the physical limits of the particle type.
-- **Soft Particles (Ground Fading)**: GPU-side fading when particles intersect with the ground (Z=0), creating a volumetric look for fire and smoke.
 - **Distance LOD**: Automatic emission scaling based on camera distance to reduce overdraw and GPU fill-rate pressure.
 
 ---

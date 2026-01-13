@@ -27,7 +27,7 @@ function scr_effect_bonfire(sys) {
         .setAlpha(1.0, 0.0)
         .setAdditive(true)
         .setGravity(35)
-        .setShape("smoke"); // USE NEW SHAPE
+        .setShape("smoke");
 
     var fireEmitter = new UeParticleEmitter(1500);
     fireEmitter.region("box", -15, -15, 0, 15, 15, 5);
@@ -60,49 +60,51 @@ function scr_effect_explosion(sys) {
     var flashType = new UeParticleType()
         .setLife(0.1, 0.2)
         .setSize(40, 100, 150)
-        .setColor($FFFFFF, $88FFFF)
+        .setColor(c_white, c_yellow)
+        .setGlow(5.0) // HIGH INTENSITY FLASH
         .setAlpha(1.0, 0.0)
         .setAdditive(true)
         .setShape("sphere");
 
-    // 2. MAIN FIRE EXPLOSION (Using 'smoke' shape for jagged fire)
+    // 2. MAIN FIRE EXPLOSION (Using 3-way gradient and glow)
     var fireballType = new UeParticleType()
-        .setLife(0.4, 0.8)
+        .setLife(0.4, 0.9)
         .setSpeed(400, 800, 200, 400)
         .setDirection(0, 360)
         .setSize(160, 280, -80)
         .setRotation(0, 360, 500, 200)
-        .setColor($00FFFF, $0022FF) // Yellow -> Orange-Red
-        .setAlpha(0.8, 0.0)
+        // 3-Way: White -> Orange -> Dark Red
+        .setColor(c_white, $000044, $0088FF, 0.15) 
+        .setGlow(2.5) // EMISSIVE BOOST
+        .setAlpha(0.9, 0.0)
         .setAdditive(true)
-        .setDrag(1.6)
+        .setDrag(1.8)
         .setShape("smoke");
 
     // 3. ROLLING DARK SMOKE (NORMAL BLENDING for high contrast)
     var smokeType = new UeParticleType()
-        .setLife(1.8, 3.5)
-        .setSpeed(100, 250, 50, 150)
+        .setLife(2.0, 4.0)
+        .setSpeed(120, 300, 60, 180)
         .setDirection(0, 360)
-        .setGravity(-15)
-        .setSize(220, 480, 100)
+        .setGravity(-20)
+        .setSize(220, 500, 120)
         .setRotation(0, 360, 10, 5)
-        .setColor($101010, $303030) // Very dark clumpy smoke
-        .setAlpha(0.6, 0.0)
-        .setAdditive(false) // NORMAL BLEND for contrast
-        .setDrag(0.8)
+        .setColor($101010, $252525, $151515, 0.5) 
+        .setAlpha(0.7, 0.0)
+        .setAdditive(false) 
+        .setDrag(1.0)
         .setShape("smoke");
 
-    // 4. SUPER-FAST HOT SPARKS (Needle-like)
+    // 4. SUPER-FAST HOT SPARKS (With Glow)
     var sparkType = new UeParticleType()
-        .setLife(0.6, 1.4)
-        .setSpeed(900, 1800, 300, 600)
-        .setGravity(600)
-        .setSize(2, 5)
-        .setScale(6.0, 0.2)
-        .setColor($AAFFFF, $0044EE)
-        .setAlpha(1.0, 0.0)
-        .setAdditive(true)
-        .setDrag(1.2);
+        .setLife(0.6, 1.5)
+        .setSpeed(1000, 2000, 400, 800)
+        .setGravity(800)
+        .setSize(2, 6)
+        .setColor(c_white, c_orange)
+        .setGlow(4.0) // BRIGHT SPARKS
+         .setAlpha(1.0, 0.0)
+         .setAdditive(true);
 
     // Emitters Configuration
     var eSmoke  = new UeParticleEmitter(1000).stream(smokeType, 0); 

@@ -28,9 +28,17 @@ function UeParticleRenderer(_shaders = {}) constructor {
   
   self.uGrav   = shader_get_uniform(self.shader, "u_ueGravity");
   self.uSizeE  = shader_get_uniform(self.shader, "u_ueSizeEnd");
+  
+  self.uColM   = shader_get_uniform(self.shader, "u_ueColorMid");
   self.uColE   = shader_get_uniform(self.shader, "u_ueColorEnd");
+  self.uColT   = shader_get_uniform(self.shader, "u_ueColorTimes"); // x: midTime, y: glow
+  
   self.uRotSpd = shader_get_uniform(self.shader, "u_ueRotSpeed");
   self.uDrag   = shader_get_uniform(self.shader, "u_ueDrag");
+  self.uAnim   = shader_get_uniform(self.shader, "u_ueAnimData"); // x: framesX, y: framesY, z: animSpeed
+  
+  self.uDepthTex = shader_get_sampler_index(self.shader, "u_ueDepthTex");
+  self.uDepthParams = shader_get_uniform(self.shader, "u_ueDepthParams");
 
   // ===== Procedural Shape Generator =====
   self.shapes = {};
@@ -95,8 +103,10 @@ function UeParticleRenderer(_shaders = {}) constructor {
    * @param {UeParticleEmitter} emitter The emitter whose buffer will be submitted.
    * @param {resource.camera} camera Reference camera for billboarding.
    * @param {struct} type The particle type containing visual data (texture, uvs).
+   * @param {texture} depthTex Optional depth texture for soft particles.
+   * @param {array} depthParams [near, far, softness, enabled]
    */
-  static submit = function(emitter, camera, type) {
+  static submit = function(emitter, camera, type, depthTex = undefined, depthParams = undefined) {
       gml_pragma("forceinline");
       shader_set(self.shader);
       var vm = camera_get_view_mat(camera);
@@ -107,9 +117,21 @@ function UeParticleRenderer(_shaders = {}) constructor {
       
       shader_set_uniform_f(self.uGrav, type.gravX, type.gravY, type.zGravAmount);
       shader_set_uniform_f(self.uSizeE, type.sizeMin + type.sizeIncr * type.lifeMax);
+      
+      shader_set_uniform_f(self.uColM, type.colorMid[0], type.colorMid[1], type.colorMid[2]);
       shader_set_uniform_f(self.uColE, type.colorEnd[0], type.colorEnd[1], type.colorEnd[2], type.alphaEnd);
+      shader_set_uniform_f(self.uColT, type.colorMidTime, type.glow);
+      
       shader_set_uniform_f(self.uRotSpd, type.rotIncr);
       shader_set_uniform_f(self.uDrag, type.drag);
+      shader_set_uniform_f(self.uAnim, type.animFramesX, type.animFramesY, type.animSpeed);
+
+      if (depthTex != undefined && depthParams != undefined) {
+          texture_set_stage(self.uDepthTex, depthTex);
+          shader_set_uniform_f(self.uDepthParams, depthParams[0], depthParams[1], depthParams[2], 1.0);
+      } else {
+          shader_set_uniform_f(self.uDepthParams, 0, 0, 0, 0);
+      }
 
       gpu_set_zwriteenable(false);
       vertex_submit(emitter.vbuffer, pr_trianglelist, type.texture);
