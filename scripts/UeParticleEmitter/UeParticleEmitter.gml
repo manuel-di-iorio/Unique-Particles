@@ -25,6 +25,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   self.enabled = true;
   self.centerX = 0; self.centerY = 0; self.centerZ = 0;
   self.sizeX = 0; self.sizeY = 0; self.sizeZ = 0;
+  self.isDestroyed = false;
   self.shape = "point";
   self.visible = true;
   self.pool = { aliveCount: 0 }; 
@@ -120,6 +121,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
    * @returns {real} The circular buffer index used.
    */
   static spawn = function (type) {
+    if (self.isDestroyed) return -1;
     var sx = self.centerX, sy = self.centerY, sz = self.centerZ;
     if (self.shape == "box") {
         sx += random_range(-0.5, 0.5) * self.sizeX; sy += random_range(-0.5, 0.5) * self.sizeY; sz += random_range(-0.5, 0.5) * self.sizeZ;
@@ -146,11 +148,13 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     // Corners: TL, TR, BL, BL, TR, BR (Triangle List 6 verts)
     static cornersX = [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5];
     static cornersY = [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5];
+    var scX = type.scaleX;
+    var scY = type.scaleY;
     
     for (var c = 0; c < 6; c++) {
         buffer_write(b, buffer_f32, sx); buffer_write(b, buffer_f32, sy); buffer_write(b, buffer_f32, sz);
         buffer_write(b, buffer_u32, cs);
-        buffer_write(b, buffer_f32, cornersX[c]); buffer_write(b, buffer_f32, cornersY[c]);
+        buffer_write(b, buffer_f32, cornersX[c] * scX); buffer_write(b, buffer_f32, cornersY[c] * scY);
         buffer_write(b, buffer_f32, vx); buffer_write(b, buffer_f32, vy); buffer_write(b, buffer_f32, vz); buffer_write(b, buffer_f32, st);
         buffer_write(b, buffer_f32, life); buffer_write(b, buffer_f32, sS); buffer_write(b, buffer_f32, rS);
     }
@@ -159,6 +163,18 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     self.lastOffset = self.writePointer * pSize;
     self.pool.aliveCount = self.maxParticles; 
     return self.writePointer;
+  }
+
+  /**
+   * @description Spawns a batch of particles instantly.
+   * @param {UeParticleType} type Particle template.
+   * @param {int} count Number of particles.
+   * @returns {UeParticleEmitter}
+   */
+  static burst = function (type, count) {
+    if (self.isDestroyed) return self;
+    repeat(count) { self.spawn(type); }
+    return self;
   }
 
   /**
@@ -177,6 +193,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
    * @param {resource.camera} camera Camera for billboard extraction.
    */
   static render = function (camera) {
+    if (self.isDestroyed) return;
     if (self.spawnedAny) {
         if (self.lastOffset > self.firstOffset) {
             // Update solo la porzione modificata
@@ -189,5 +206,28 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     }
     if (self.vbuffer == undefined || self.streamType == undefined) return;
     global.UE_PARTICLE_RENDERER.submit(self, camera, self.streamType);
+  }
+
+  /**
+   * @description Clears all active particles from the emitter by resetting pointers and zeroing the buffer.
+   * @returns {UeParticleEmitter}
+   */
+  static clear = function() {
+    buffer_fill(self.rawBuffer, 0, buffer_u8, 0, buffer_get_size(self.rawBuffer));
+    self.writePointer = 0;
+    self.spawnedAny = true; 
+    self.firstOffset = 0;
+    self.lastOffset = 0;
+    return self;
+  }
+
+  /**
+   * @description Properly releases GPU and CPU memory used by this emitter.
+   */
+  static destroy = function() {
+    if (self.isDestroyed) return;
+    self.isDestroyed = true;
+    if (buffer_exists(self.rawBuffer)) buffer_delete(self.rawBuffer);
+    if (self.vbuffer != undefined) vertex_delete_buffer(self.vbuffer);
   }
 }

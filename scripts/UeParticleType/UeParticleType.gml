@@ -52,6 +52,9 @@ function UeParticleType() constructor {
     self.texture = -1;
     self.uvs = [0, 0, 1, 1]; 
     self.additive = false;
+    self.scaleX = 1.0;
+    self.scaleY = 1.0;
+    self.drag = 0.0;
 
     // --- Internal Flags & Optimized Values ---
     self.gravX = 0.0;
@@ -198,6 +201,30 @@ function UeParticleType() constructor {
     static setAdditive = function(enable) {
         gml_pragma("forceinline");
         self.additive = enable;
+        return self;
+    }
+
+    /**
+     * @description Sets non-uniform scaling for the particle quad (aspect ratio).
+     * @param {real} sx Width multiplier.
+     * @param {real} sy Height multiplier.
+     * @returns {UeParticleType}
+     */
+    static setScale = function(sx, sy) {
+        gml_pragma("forceinline");
+        self.scaleX = sx;
+        self.scaleY = sy;
+        return self;
+    }
+
+    /**
+     * @description Sets the air resistance (0 to 1). 0 = no drag, higher values slow down particles.
+     * @param {real} val Drag amount.
+     * @returns {UeParticleType}
+     */
+    static setDrag = function(val) {
+        gml_pragma("forceinline");
+        self.drag = val;
         return self;
     }
     

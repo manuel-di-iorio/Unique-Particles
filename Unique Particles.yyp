@@ -24,6 +24,7 @@
   "resources":[
     {"id":{"name":"oTest","path":"objects/oTest/oTest.yy",},},
     {"id":{"name":"rTest","path":"rooms/rTest/rTest.yy",},},
+    {"id":{"name":"scrEffectFunctions","path":"scripts/scrEffectFunctions/scrEffectFunctions.yy",},},
     {"id":{"name":"UeParticleEmitter","path":"scripts/UeParticleEmitter/UeParticleEmitter.yy",},},
     {"id":{"name":"UeParticlePool","path":"scripts/UeParticlePool/UeParticlePool.yy",},},
     {"id":{"name":"UeParticleRenderer","path":"scripts/UeParticleRenderer/UeParticleRenderer.yy",},},

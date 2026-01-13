@@ -1,3 +1,6 @@
+if (variable_instance_exists(id, "particleSystem")) {
+    particleSystem.destroy();
+}
 if (variable_instance_exists(id, "floorVBuffer")) {
     vertex_delete_buffer(floorVBuffer);
 }

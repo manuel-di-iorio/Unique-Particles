@@ -14,6 +14,7 @@ uniform vec3 u_ueGravity;
 uniform float u_ueSizeEnd;
 uniform vec4 u_ueColorEnd;
 uniform float u_ueRotSpeed;
+uniform float u_ueDrag;
 
 varying vec2 v_vTexcoord;
 varying vec4 v_vColour;
@@ -23,16 +24,18 @@ void main() {
     float age = u_ueTime - in_TextureCoord1.w;
     float maxLife = in_TextureCoord2.x;
     
-    // Auto-discard se morta (spostiamo fuori dal frustum)
+    // Auto-discard if killed (moved out of clip space)
     if (age < 0.0 || age > maxLife) {
-        gl_Position = vec4(0.0);
+        gl_Position = vec4(2e5, 2e5, 2e5, 1.0);
         return;
     }
 
     float t = age / maxLife;
 
-    // 1. Fisica (Uniform Gravity)
-    vec3 basePos = in_Position + (in_TextureCoord1.xyz * age) + (0.5 * u_ueGravity * age * age);
+    // 1. Physics with Linear Drag
+    // Integral of v0 * exp(-k*age) -> v0 * (1.0 - exp(-k*age)) / k
+    float dragFactor = (u_ueDrag > 0.01) ? (1.0 - exp(-u_ueDrag * age)) / u_ueDrag : age;
+    vec3 basePos = in_Position + (in_TextureCoord1.xyz * dragFactor) + (0.5 * u_ueGravity * age * age);
 
     // 2. Visuals (Uniform Transitions)
     float size = mix(in_TextureCoord2.y, u_ueSizeEnd, t);

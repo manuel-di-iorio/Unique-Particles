@@ -30,6 +30,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
   self.uSizeE  = shader_get_uniform(self.shader, "u_ueSizeEnd");
   self.uColE   = shader_get_uniform(self.shader, "u_ueColorEnd");
   self.uRotSpd = shader_get_uniform(self.shader, "u_ueRotSpeed");
+  self.uDrag   = shader_get_uniform(self.shader, "u_ueDrag");
 
   // ===== Procedural Shape Generator =====
   self.shapes = {};
@@ -61,6 +62,16 @@ function UeParticleRenderer(_shaders = {}) constructor {
     gpu_set_blendmode(bm_add);
     for(var i=0; i<r/2; i++) { draw_set_alpha((1-i/(r/2))*0.5); draw_circle(r/2, r/2, i, false); }
     gpu_set_blendmode(bm_normal); draw_set_alpha(1.0);
+  });
+  self.__createShape("smoke", function(r) {
+      draw_set_alpha(0.3);
+      var m = r/2;
+      for(var i=0; i<8; i++) {
+          var ang = i * 45;
+          var dist = random_range(2, r/4);
+          draw_circle(m + lengthdir_x(dist, ang), m + lengthdir_y(dist, ang), random_range(r/4, r/2.5), false);
+      }
+      draw_set_alpha(1);
   });
   self.__createShape("flare", function(r) {
       var m = r/2; draw_set_alpha(0.5);
@@ -98,6 +109,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
       shader_set_uniform_f(self.uSizeE, type.sizeMin + type.sizeIncr * type.lifeMax);
       shader_set_uniform_f(self.uColE, type.colorEnd[0], type.colorEnd[1], type.colorEnd[2], type.alphaEnd);
       shader_set_uniform_f(self.uRotSpd, type.rotIncr);
+      shader_set_uniform_f(self.uDrag, type.drag);
 
       gpu_set_zwriteenable(false);
       vertex_submit(emitter.vbuffer, pr_trianglelist, type.texture);

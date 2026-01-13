@@ -94,4 +94,32 @@ function UeParticleSystem() constructor {
     for (var i = 0; i < array_length(self.emitters); i++) total += self.emitters[i].pool.aliveCount;
     return total;
   }
+
+  /** 
+  * @description Removes all emitters from the system and destroys their buffers.
+  */ 
+  static clear = function () {
+    for (var i = 0, il = array_length(self.emitters); i < il; i++) {
+        self.emitters[i].destroy();
+    }
+    self.emitters = [];
+  }
+
+  /** 
+  * @description Performs final cleanup of all emitters.
+  */ 
+  static destroy = function () {
+    self.clear();
+  }
+
+  /**
+  * @description Bursts particles on all emitters that have a streamType.
+  * @param {int} count
+  */
+  static burst = function (count) {
+    for (var i = 0, il = array_length(self.emitters); i < il; i++) {
+        var e = self.emitters[i];
+        if (e.streamType != undefined) e.burst(e.streamType, count);
+    }
+  }
 }
