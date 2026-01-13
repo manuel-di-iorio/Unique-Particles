@@ -121,15 +121,6 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     static spawn = function (type) {
     gml_pragma("forceinline");
 
-        // Use the same random table for spawn to avoid random() calls
-        static randomTableSize = 1024;
-        static randomTable = undefined;
-        static randomIndex = 0;
-    if (randomTable == undefined) {
-      randomTable = array_create(randomTableSize);
-      for (var _r = 0; _r < randomTableSize; _r++) randomTable[_r] = random(1.0);
-    }
-
     var p = self.pool;
     var i = p.allocate();
     if (i == -1) return -1;
@@ -140,17 +131,17 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     var sz = self.centerZ;
 
     if (self.shape == "box") {
-      sx += (randomTable[randomIndex++ & 1023] * 2.0 - 1.0) * self.sizeX * 0.5;
-      sy += (randomTable[randomIndex++ & 1023] * 2.0 - 1.0) * self.sizeY * 0.5;
-      sz += (randomTable[randomIndex++ & 1023] * 2.0 - 1.0) * self.sizeZ * 0.5;
+      sx += random_range(-0.5, 0.5) * self.sizeX;
+      sy += random_range(-0.5, 0.5) * self.sizeY;
+      sz += random_range(-0.5, 0.5) * self.sizeZ;
     } else if (self.shape == "sphere") {
-      var r = randomTable[randomIndex++ & 1023] * self.sizeX * 0.5;
-      var phi = randomTable[randomIndex++ & 1023] * 2 * pi;
-      var theta = randomTable[randomIndex++ & 1023] * pi;
-      var st = fast_sin(theta);
-      sx += r * st * fast_cos(phi);
-      sy += r * st * fast_sin(phi);
-      sz += r * fast_cos(theta);
+      var r = random(1.0) * self.sizeX * 0.5;
+      var phi = random(2 * pi);
+      var theta = random(pi);
+      var st = sin(theta);
+      sx += r * st * cos(phi);
+      sy += r * st * sin(phi);
+      sz += r * cos(theta);
     }
 
     p.posX[i] = sx;
@@ -158,7 +149,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     p.posZ[i] = sz;
 
     // --- Initialize from Type (Optimized with pre-calculated diffs) ---
-    var life = type.lifeMin + type.lifeDiff * randomTable[randomIndex++ & 1023];
+    var life = random_range(type.lifeMin, type.lifeMax);
     p.life[i] = life;
     p.maxLife[i] = life;
 
@@ -171,25 +162,25 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     p.hasRotation[i] = type.hasRotation;
     p.hasPhysics[i] = type.hasPhysics;
 
-    var size = type.sizeMin + type.sizeDiff * randomTable[randomIndex++ & 1023];
+    var size = random_range(type.sizeMin, type.sizeMax);
     p.size[i] = size;
     p.baseSize[i] = size;
     p.diffSize[i] = type.sizeIncr * life;
 
-    p.speed[i] = type.speedMin + type.speedDiff * randomTable[randomIndex++ & 1023];
+    p.speed[i] = random_range(type.speedMin, type.speedMax);
     p.speedIncr[i] = type.speedIncr;
     p.speedWiggle[i] = type.speedWiggle;
 
-    p.zSpeed[i] = type.zSpeedMin + type.zSpeedDiff * randomTable[randomIndex++ & 1023];
+    p.zSpeed[i] = random_range(type.zSpeedMin, type.zSpeedMax);
     p.zSpeedIncr[i] = type.zSpeedIncr;
     p.zSpeedWiggle[i] = type.zSpeedWiggle;
 
-    var dir = type.dirMin + type.dirDiff * randomTable[randomIndex++ & 1023];
+    var dir = random_range(type.dirMin, type.dirMax);
     p.direction[i] = dir;
     p.dirIncr[i] = type.dirIncr;
     p.dirWiggle[i] = type.dirWiggle;
-    p.dirX[i] = fast_cos(dir);
-    p.dirY[i] = -fast_sin(dir);
+    p.dirX[i] = cos(dir);
+    p.dirY[i] = -sin(dir);
 
     p.velX[i] = 0;
     p.velY[i] = 0;
@@ -216,7 +207,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     p.diffAlpha[i] = type.alphaEnd - type.alphaStart;
     p.alpha[i] = p.baseAlpha[i];
 
-    p.rot[i] = type.rotMin + type.rotDiff * randomTable[randomIndex++ & 1023];
+    p.rot[i] = random_range(type.rotMin, type.rotMax);
     p.rotIncr[i] = type.rotIncr;
     p.rotWiggle[i] = type.rotWiggle;
 
@@ -239,15 +230,6 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
         dt = self._dtAccumulator;
         self._skipCounter = 0;
         self._dtAccumulator = 0;
-    }
-
-        // --- 0. Batch Random Generation (Static Table) ---
-        static randomTableSize = 1024;
-        static randomTable = undefined;
-        static randomIndex = 0;
-    if (randomTable == undefined) {
-      randomTable = array_create(randomTableSize);
-      for (var _r = 0; _r < randomTableSize; _r++) randomTable[_r] = random(2.0) - 1.0;
     }
 
     // 1. Emission (Adjusted by LOD)
@@ -362,16 +344,16 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
 
         // Wiggle (Batch Random)
         if (fWiggle) {
-          var r1 = randomTable[randomIndex++ & 1023];
-          var r2 = randomTable[randomIndex++ & 1023];
+          var r1 = random_range(-1.0, 1.0);
+          var r2 = random_range(-1.0, 1.0);
 
           if (_speedWiggle[idx] != 0) _speed[idx] += r1 * _speedWiggle[idx] * dt;
           if (_zSpeedWiggle[idx] != 0) _zSpeed[idx] += r2 * _zSpeedWiggle[idx] * dt;
           if (_dirWiggle[idx] != 0) {
             dir += r1 * _dirWiggle[idx] * dt;
             _direction[idx] = dir;
-            _dirX[idx] = fast_cos(dir);
-            _dirY[idx] = -fast_sin(dir);
+            _dirX[idx] = cos(dir);
+            _dirY[idx] = -sin(dir);
           }
           if (_rotWiggle[idx] != 0) _rot[idx] += r2 * _rotWiggle[idx] * dt;
         }
@@ -379,8 +361,8 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
         if (dirIncr != 0) {
           dir += dirIncr * dt;
           _direction[idx] = dir;
-          _dirX[idx] = fast_cos(dir);
-          _dirY[idx] = -fast_sin(dir);
+          _dirX[idx] = cos(dir);
+          _dirY[idx] = -sin(dir);
         }
 
         // Velocity & Gravity
@@ -407,7 +389,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
       // --- Visual Interpolation & Quantization ---
       if (fSize) {
         var size = _baseSize[idx] + _diffSize[idx] * nAge;
-        if (_sizeWiggle[idx] != 0) size += randomTable[randomIndex++ & 1023] * _sizeWiggle[idx];
+        if (_sizeWiggle[idx] != 0) size += random_range(-1.0, 1.0) * _sizeWiggle[idx];
         // Quantize size to avoid tiny CPU->GPU jitter
         _size[idx] = floor(size * 256.0) * 0.00390625;
       }
