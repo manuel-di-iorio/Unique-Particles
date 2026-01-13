@@ -1,5 +1,14 @@
 global.UE_PARTICLE_RENDERER_VERSION = "0.0.1";
 
+enum UE_RENDER_ENTRY {
+    POOL,
+    CAMERA,
+    TEXTURE,
+    UVS,
+    INTERPOLATION,
+    DO_SORT
+}
+
 /**
  * @description Advanced particle renderer with texture batching and procedural shapes.
  */
@@ -94,7 +103,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
         _uvs = [t[0], t[1], t[2]-t[0], t[3]-t[1]];
     }
     var interp = (pool[$ "emitter"] != undefined) ? pool.emitter._dtAccumulator : 0;
-    array_push(self.renderQueue, { pool: pool, camera: camera, texture: tex, uvs: _uvs, interpolation: interp, doSort: doSort });
+    array_push(self.renderQueue, [pool, camera, tex, _uvs, interp, doSort]);
   }
 
   function flush() {
@@ -103,14 +112,16 @@ function UeParticleRenderer(_shaders = {}) constructor {
       
       // Batch sort by texture
       array_sort(self.renderQueue, function(a, b) {
-          if (a.texture == b.texture) return 0;
-          return (string(a.texture) > string(b.texture)) ? 1 : -1;
+          var texA = a[UE_RENDER_ENTRY.TEXTURE];
+          var texB = b[UE_RENDER_ENTRY.TEXTURE];
+          if (texA == texB) return 0;
+          return (string(texA) > string(texB)) ? 1 : -1;
       });
 
       var currentTex = -1;
       var batchStart = 0;
       for (var i = 0; i <= count; i++) {
-          var tex = (i < count) ? self.renderQueue[i].texture : -2;
+          var tex = (i < count) ? self.renderQueue[i][UE_RENDER_ENTRY.TEXTURE] : -2;
           if (tex != currentTex || i == count) {
               if (currentTex != -1) self.__submitBatch(batchStart, i);
               if (i < count) { currentTex = tex; batchStart = i; }
@@ -121,16 +132,16 @@ function UeParticleRenderer(_shaders = {}) constructor {
 
   static __submitBatch = function(start, stop) {
       var first = self.renderQueue[start];
-      var vm = camera_get_view_mat(first.camera);
+      var vm = camera_get_view_mat(first[UE_RENDER_ENTRY.CAMERA]);
       array_copy(_vmCache, 0, vm, 0, 16);
       
       vertex_begin(self.vbuffer, self.format);
       for (var k = start; k < stop; k++) {
           var q = self.renderQueue[k];
-          var pool = q.pool;
+          var pool = q[UE_RENDER_ENTRY.POOL];
           
           // Conditional Sort: only if requested, global toggle is on, and pool size is manageable
-          if (self.sortingEnabled && q.doSort && pool.aliveCount < 512) {
+          if (self.sortingEnabled && q[UE_RENDER_ENTRY.DO_SORT] && pool.aliveCount < 512) {
               var cx = -(vm[0]*vm[12] + vm[1]*vm[13] + vm[2]*vm[14]);
               var cy = -(vm[4]*vm[12] + vm[5]*vm[13] + vm[6]*vm[14]);
               var cz = -(vm[8]*vm[12] + vm[9]*vm[13] + vm[10]*vm[14]);
@@ -169,14 +180,14 @@ function UeParticleRenderer(_shaders = {}) constructor {
 
       shader_set(self.shader);
       shader_set_uniform_f(self.uTime, current_time/1000.0);
-      shader_set_uniform_f_array(self.uUVRegion, first.uvs);
+      shader_set_uniform_f_array(self.uUVRegion, first[UE_RENDER_ENTRY.UVS]);
       shader_set_uniform_f(self.uRight, _vmCache[0], _vmCache[4], _vmCache[8]);
       shader_set_uniform_f(self.uUp, _vmCache[1], _vmCache[5], _vmCache[9]);
-      shader_set_uniform_f(self.uInterpolation, first.interpolation);
+      shader_set_uniform_f(self.uInterpolation, first[UE_RENDER_ENTRY.INTERPOLATION]);
       
       var b = gpu_get_blendenable(), zw = gpu_get_zwriteenable(), zt = gpu_get_ztestenable();
       gpu_set_blendenable(true); gpu_set_ztestenable(true); gpu_set_zwriteenable(false);
-      vertex_submit(self.vbuffer, pr_trianglelist, first.texture);
+      vertex_submit(self.vbuffer, pr_trianglelist, first[UE_RENDER_ENTRY.TEXTURE]);
       gpu_set_blendenable(b); gpu_set_zwriteenable(zw); gpu_set_ztestenable(zt);
       shader_reset();
   };
