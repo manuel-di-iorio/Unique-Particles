@@ -11,6 +11,22 @@ function UeParticleSystem() constructor {
   self.frustumCulling = true;
   self.sortingEnabled = false; 
 
+  self.positionX = 0;
+  self.positionY = 0;
+  self.positionZ = 0;
+
+  /**
+   * @description Sets the position point to move all new particles for all emitters.
+   * @param {real} px Position X.
+   * @param {real} py Position Y.
+   * @param {real} pz Position Z.
+   */
+  static setPosition = function (px, py, pz) {
+    self.positionX = px;
+    self.positionY = py;
+    self.positionZ = pz;
+  }
+
   /** 
   * @description Registers an emitter within this system.
   * @param {UeParticleEmitter} emitter The emitter instance.
@@ -46,8 +62,8 @@ function UeParticleSystem() constructor {
 
     for (var i = 0, il = array_length(emitters); i < il; i++) {
       var emitter = emitters[i];
-      if (lod) emitter.updateLOD(cx, cy, cz);
-      emitter.update(dt);
+      if (lod) emitter.updateLOD(cx, cy, cz, self.positionX, self.positionY, self.positionZ);
+      emitter.update(dt, self.positionX, self.positionY, self.positionZ);
     }
   }
 
@@ -101,7 +117,9 @@ function UeParticleSystem() constructor {
   */ 
   static getTotalParticles = function () {
     var total = 0;
-    for (var i = 0; i < array_length(self.emitters); i++) total += self.emitters[i].pool.aliveCount;
+    for (var i = 0, il = array_length(self.emitters); i < il; i++) {
+      total += self.emitters[i].pool.aliveCount;
+    }
     return total;
   }
 

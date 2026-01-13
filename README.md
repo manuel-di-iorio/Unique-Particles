@@ -25,6 +25,7 @@ Unique Particles is a state-of-the-art particle system that offloads 100% of par
 - **`.setLife(min, max)`**: Lifetime in seconds.
 - **`.setSize(min, max, [incr], [wiggle])`**: Initial size and transformation over time.
 - **`.setScale(sx, sy)`**: Set aspect ratio for the particle quad (e.g., for sparks).
+- **`.setRotation(min, max, [incr], [wiggle])`**: Initial rotation and rotation speed.
 - **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration (supports 3D).
 - **`.setDrag(value)`**: Air resistance (0-1). Slows down particles over time.
 - **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
@@ -32,9 +33,10 @@ Unique Particles is a state-of-the-art particle system that offloads 100% of par
 #### 🎨 Visuals & Physics
 - `.setColor(c1, [c2], [c3], [midTime])`: Set 2-way or 3-way color gradient
 - `.setAlpha(a1, [a2])`: Set start and end transparency.
+- `.setAdditive(enable)`: Toggles additive blending.
 - `.setGlow(intensity)`: Set emissive intensity for HDR/Bloom
 - `.setAnimation(xFrames, yFrames, speed)`: Configure flipbook sprite animation
-- `.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
+- `.setSprite(sprite, [subimg])`: Uses a GameMaker sprite as a texture.
 - `.setShape(name)`: Uses a pre-defined procedural shape.
 
 ### 🎨 Procedural Shapes
@@ -52,11 +54,24 @@ The engine automatically generates procedural textures for common effects:
 
 ---
 
+## 🏗️ UeParticleEmitter API
+
+`UeParticleEmitter` is the worker that manages a pool of particles and their GPU buffers.
+
+- **`.region(shape, x1, y1, z1, x2, y2, z2)`**: Defines the spawning area (shape can be `"point"`, `"box"`, `"sphere"`).
+- **`.stream(type, rate)`**: Starts continuous emission of a specific particle type at a given rate (particles/sec).
+- **`.burst(type, count, [x], [y], [z])`: Spawns a batch of particles instantly at an optional relative offset.
+- **`.clear()`**: Resets the emitter, removing all active particles.
+- **`.destroy()`**: Properly cleans up the emitter's buffers and memory.
+
+---
+
 ## 🏗️ UeParticleSystem API
 
 `UeParticleSystem` manages multiple emitters and handles global rendering, LOD, and culling.
 
 - **`.addEmitter(emitter)`**: Adds an emitter to the system.
+- **`.setPosition(x, y, z)`**: Sets a global position offset for the entire system (useful for moving systems).
 - **`.update([dt], [cx], [cy], [cz])`**: Updates all emitters.
 - **`.render([camera], [depthTex], [softness], [near], [far], [shadowTex], [shadowMatrix], [shadowStrength], [shadowBias])`**: Renders all visible emitters.
     - `camera`: Camera resource (defaults to `view_camera[0]`).
@@ -68,7 +83,9 @@ The engine automatically generates procedural textures for common effects:
     - `shadowStrength`: Intensity of shadows (0-1).
     - `shadowBias`: Offset to prevent shadow acne.
 - **`.burst(count)`**: Bursts particles on all emitters with a stream type.
+- **`.getTotalParticles()`**: Returns the total number of active particles across all emitters.
 - **`.clear()`**: Resets all emitters.
+- **`.destroy()`**: Properly cleans up the system and all its emitters.
 
 ---
 

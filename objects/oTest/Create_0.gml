@@ -1,4 +1,5 @@
 particleSystem = new UeParticleSystem();
+particleSystem.setPosition(0, 0, 15);
 
 // Initial Effect
 currentEffect = "bonfire";
