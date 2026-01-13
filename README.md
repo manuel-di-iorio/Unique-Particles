@@ -7,19 +7,6 @@ Unique Particles is a state-of-the-art particle system that offloads 100% of par
 
 ---
 
-## 📊 Performance Pillars
-
-The engine is built on six core architectural pillars:
-
-1. **Analytical GPU Trajectory**: The CPU never calculates positions. It only writes "Birth Data" (Spawn Time, Initial Velocity, etc.) to a buffer. The Vertex Shader solves the motion equation `p = p0 + v0*t + 0.5*a*t^2` in real-time.
-2. **Circular Persistent Buffers**: Instead of rebuilding the vertex buffer every frame, the system uses a circular pool. For each particle, GML writes 6 vertices **only once** at spawn. From that point on, the GPU takes over.
-3. **Zero-Allocation Memory Model**: Using a fixed-size `buffer_fixed` and pre-allocated arrays, the system performs **zero runtime allocations**. This eliminates the possibility of memory fragmentation or sudden GC spikes.
-4. **Z-Up 3D Coordinate System**: Designed specifically for 3D GameMaker environments. All physics and billboarding logic assume a Z-Up coordinate system, making it perfect for modern 3D titles.
-5. **Age-Based Auto-Discard**: There is no CPU-side "killing" of particles. The shader compares `uTime - spawnTime`. If it exceeds `maxLife`, the vertex is discarded (`gl_Position = vec4(0.0)`), resulting in zero processing for dead particles.
-6. **Lightweight Vertex Layout (52 Bytes)**: To maximize bandwidth, we use a hybrid approach. Persistent per-particle data (Position, Velocity, Birth Time) is in the vertices, while shared emitter data (Gravity, Size/Color Transitions) is passed via **Uniforms**.
-
----
-
 ## 🧬 System Architecture
 
 1. **[UeParticleType](scripts/UeParticleType/UeParticleType.gml)**: The template. Defines visuals, physics, and life ranges.
@@ -35,22 +22,22 @@ The engine is built on six core architectural pillars:
 
 ### Configuration Methods
 
--   **`.setLife(min, max)`**: Lifetime in seconds.
--   **`.setSize(min, max, [incr], [wiggle])`**: Initial size and transformation over time.
--   **`.setScale(sx, sy)`**: **(v1.1)** Set aspect ratio for the particle quad.
--   **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration (supports 3D).
--   **`.setDrag(value)`**: Air resistance (0-1). Slows down particles over time.
--   **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
--   **`.setGravity(amountZ, [amountXY], [dirXY])`**: Constant gravity applied to particles.
--   **`.setColor(color1, [color2])`**: Start and end color (interpolation handled by GPU).
--   **`.setAlpha(alpha1, [alpha2])`**: Start and end transparency.
--   **`.setAdditive(bool)`**: Enables additive blend mode.
--   **`.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
--   **`.setShape(name)`**: Uses a pre-defined procedural shape.
+- **`.setLife(min, max)`**: Lifetime in seconds.
+- **`.setSize(min, max, [incr], [wiggle])`**: Initial size and transformation over time.
+- **`.setScale(sx, sy)`**: Set aspect ratio for the particle quad (e.g., for sparks).
+- **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration (supports 3D).
+- **`.setDrag(value)`**: Air resistance (0-1). Slows down particles over time.
+- **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
+- **`.setGravity(amountZ, [amountXY], [dirXY])`**: Constant gravity applied to particles.
+- **`.setColor(color1, [color2])`**: Start and end color (interpolation handled by GPU).
+- **`.setAlpha(alpha1, [alpha2])`**: Start and end transparency.
+- **`.setAdditive(bool)`**: Enables additive blend mode.
+- **`.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
+- **`.setShape(name)`**: Uses a pre-defined procedural shape.
 
 ### 🎨 Procedural Shapes
 
-The engine automatically generates procedural textures to avoid loading external sprites for common effects:
+The engine automatically generates procedural textures for common effects:
 
 *   **`"point"`**: A solid circular point with slight antialiasing.
 *   **`"sphere"`**: A soft particle with radial decay, perfect for smoke, glows, and fire.
@@ -89,35 +76,29 @@ myEmitter.region("box", -10, -10, 0, 10, 10, 5);
 // Different emission modes
 myEmitter.stream(fireType, 100); // 100 particles/sec
 myEmitter.burst(sparkType, 50);  // Instant 50 particles
-```
-
-### 3. Loop
-```gml
-// Step Event (with Camera position for LOD)
-mySystem.update(delta_time/1000000, camX, camY, camZ);
-
-// Draw Event
-mySystem.render(camera);
+myEmitter.clear();               // Reset emitter
 ```
 
 ---
 
-## 🌪️ Optimization Features
+## 🌪️ Performance & Optimization
 
-### Circular Write-Once Strategy
-The system uses the `vertex_create_buffer_from_buffer` approach to push data from a raw CPU buffer to the GPU. This update only happens if a new particle was spawned, ensuring that static emitters cost **zero CPU** on the draw call.
+The engine is built on high-performance architectural pillars designed for modern 3D games:
 
-### Analytical Frustum Culling
-Instead of a simple bounding box, the system calculates a **Dynamic Culling Sphere**. The radius is determined analytically using the physical limits of the particle type:
-`Radius = ShapeSize + (MaxSpeed * MaxLife + 0.5 * Gravity * MaxLife^2)`
-This ensures 100% accurate visibility checks. The system then leverages GameMaker's native `sphere_is_visible` function.
+### 🚀 GPU-Driven Simulation
+- **Analytical GPU Trajectory**: The CPU never calculates positions. It only writes "Birth Data" to a buffer. The Vertex Shader solves the motion equation `p = p0 + v0*t + 0.5*a*t^2` in real-time.
+- **Age-Based Auto-Discard**: No CPU-side "killing" of particles. The shader compares `age` to `maxLife`; if it exceeds it, the vertex is discarded, resulting in zero processing for dead particles.
 
-### Soft Particles (Ground Fading)
-To prevent ugly "sharp edges" when particles intersect with the ground (Z=0), the engine implements **GPU-side Ground Softness**.
-The shader calculates the distance of each vertex from the ground plane and fades the alpha transparency accordingly. This creates a smooth, volumetric look for fire, smoke, and dust when hitting the floor.
+### 💾 Memory & Bandwidth
+- **Circular Persistent Buffers**: Uses a `vertex_update_buffer_from_buffer` approach. GML writes vertex data **only once** at spawn. Static emitters cost **zero CPU** on the draw call.
+- **Zero-Allocation Model**: Uses fixed-size buffers and pre-allocated arrays, eliminating runtime allocations, memory fragmentation, and GC spikes.
+- **Lightweight Layout (52 Bytes)**: To maximize bandwidth, only per-particle data is in vertices, while shared emitter data is passed via **Uniforms**.
 
-### Distance LOD (Level of Detail)
-Automatic emission scaling based on camera distance. Far emitters will automatically spawn fewer particles, significantly reducing overdraw and GPU fill-rate pressure without affecting the "volumetric feel" of the near-field scene.
+### 📐 3D & Visuals
+- **Z-Up 3D System**: Designed specifically for 3D GameMaker environments with Z-up coordinates.
+- **Analytical Frustum Culling**: Calculates a **Dynamic Culling Sphere** using the physical limits of the particle type.
+- **Soft Particles (Ground Fading)**: GPU-side fading when particles intersect with the ground (Z=0), creating a volumetric look for fire and smoke.
+- **Distance LOD**: Automatic emission scaling based on camera distance to reduce overdraw and GPU fill-rate pressure.
 
 ---
 Developed with ❤️ by Emmanuel Di Iorio - MIT License
