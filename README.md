@@ -20,6 +20,10 @@ The system was designed with a zero-overhead approach. Here are the key optimiza
 - **Update Skipping**: Far away emitters skip animation frames but accumulate delta time to save CPU without losing positional accuracy.
 - **GPU Extrapolation**: The shader uses particle velocity to smoothly interpolate movement during skipped frames, ensuring 60 FPS visual fluidity even with 10 FPS logic updates.
 - **Native Frustum Culling**: Automatic skipping of invisible emitters using `sphere_is_visible`.
+- **Conditional Depth Sorting**: Only performs expensive depth sorting for non-additive particles and only if the count is manageable (< 512).
+- **Trig LUT (Look-Up Table)**: Pre-calculated sine and cosine tables (2048 steps) to eliminate `sin`/`cos` overhead during updates.
+- **Emitter-level Branching**: Critical update loops are branched at the emitter level rather than per-particle, reducing CPU branching overhead.
+- **Value Quantization**: Float values (size, alpha) are quantized to reduce CPU->GPU jitter and bandwidth noise.
 - **Forceinline**: Systematic use of `gml_pragma("forceinline")` to eliminate function call overhead.
 
 ---

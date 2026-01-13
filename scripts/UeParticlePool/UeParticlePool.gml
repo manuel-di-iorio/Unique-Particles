@@ -151,11 +151,13 @@ function UeParticlePool(maxCount) constructor {
         _indices[i] = _idx;
     }
     
-    // Sort the temporary index list
-    var _subset = array_create(_count);
+    // Sort the temporary index list using a resized global array to avoid allocation
+    var _subset = global.__ue_sort_subset;
+    array_resize(_subset, _count);
     array_copy(_subset, 0, _indices, 0, _count);
     
     array_sort(_subset, function(_a, _b) {
+        gml_pragma("forceinline");
         return global.__ue_sort_dist[_b] - global.__ue_sort_dist[_a];
     });
     
@@ -166,3 +168,4 @@ function UeParticlePool(maxCount) constructor {
 
 global.__ue_sort_dist = array_create(8192, 0);
 global.__ue_sort_indices = array_create(8192, 0);
+global.__ue_sort_subset = array_create(8192, 0);

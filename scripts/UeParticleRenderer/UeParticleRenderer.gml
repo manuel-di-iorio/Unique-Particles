@@ -82,9 +82,9 @@ function UeParticleRenderer(_shaders = {}) constructor {
 
   self.fallbackTexture = self.shapes.sphere.texture;
   self.fallbackUVs = self.shapes.sphere.uvs;
-  self.autoSort = false;
+  self.sortingEnabled = false;
 
-  function render(pool, camera, texture = -1, uvs = undefined) {
+  function render(pool, camera, texture = -1, uvs = undefined, doSort = false) {
     gml_pragma("forceinline");
     if (pool.aliveCount == 0) return;
     var tex = (texture == -1) ? self.fallbackTexture : texture;
@@ -94,7 +94,7 @@ function UeParticleRenderer(_shaders = {}) constructor {
         _uvs = [t[0], t[1], t[2]-t[0], t[3]-t[1]];
     }
     var interp = (pool[$ "emitter"] != undefined) ? pool.emitter._dtAccumulator : 0;
-    array_push(self.renderQueue, { pool: pool, camera: camera, texture: tex, uvs: _uvs, interpolation: interp });
+    array_push(self.renderQueue, { pool: pool, camera: camera, texture: tex, uvs: _uvs, interpolation: interp, doSort: doSort });
   }
 
   function flush() {
@@ -128,7 +128,9 @@ function UeParticleRenderer(_shaders = {}) constructor {
       for (var k = start; k < stop; k++) {
           var q = self.renderQueue[k];
           var pool = q.pool;
-          if (self.autoSort) {
+          
+          // Conditional Sort: only if requested, global toggle is on, and pool size is manageable
+          if (self.sortingEnabled && q.doSort && pool.aliveCount < 512) {
               var cx = -(vm[0]*vm[12] + vm[1]*vm[13] + vm[2]*vm[14]);
               var cy = -(vm[4]*vm[12] + vm[5]*vm[13] + vm[6]*vm[14]);
               var cz = -(vm[8]*vm[12] + vm[9]*vm[13] + vm[10]*vm[14]);

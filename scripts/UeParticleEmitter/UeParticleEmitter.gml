@@ -147,10 +147,10 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
       var r = randomTable[randomIndex++ & 1023] * self.sizeX * 0.5;
       var phi = randomTable[randomIndex++ & 1023] * 2 * pi;
       var theta = randomTable[randomIndex++ & 1023] * pi;
-      var st = sin(theta);
-      sx += r * st * cos(phi);
-      sy += r * st * sin(phi);
-      sz += r * cos(theta);
+      var st = fast_sin(theta);
+      sx += r * st * fast_cos(phi);
+      sy += r * st * fast_sin(phi);
+      sz += r * fast_cos(theta);
     }
 
     p.posX[i] = sx;
@@ -188,8 +188,8 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     p.direction[i] = dir;
     p.dirIncr[i] = type.dirIncr;
     p.dirWiggle[i] = type.dirWiggle;
-    p.dirX[i] = cos(dir);
-    p.dirY[i] = -sin(dir);
+    p.dirX[i] = fast_cos(dir);
+    p.dirY[i] = -fast_sin(dir);
 
     p.velX[i] = 0;
     p.velY[i] = 0;
@@ -259,10 +259,24 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
       }
     }
 
-    // 2. Particle Lifecycle & Physics
+    // 2. Particle Lifecycle & Logic
     var p = self.pool;
     var count = p.aliveCount;
     if (count <= 0) return;
+
+    var type = self.streamType;
+    // Early-out if emitter is completely static and no emission is happening
+    if (type != undefined && !type.hasPhysics && !type.hasWiggle && !type.hasColorOverLife && !type.hasAlphaOverLife && !type.hasSizeOverLife && !type.hasRotation) {
+        // Only update life
+        var i = 0, _active = p.activeIndices, _life = p.life;
+        while (i < count) {
+            var idx = _active[i];
+            _life[idx] -= dt;
+            if (_life[idx] <= 0) { p.free(i); count--; continue; }
+            i++;
+        }
+        return;
+    }
 
     var i = 0;
     var _active = p.activeIndices;
@@ -316,13 +330,13 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     var _rotWiggle = p.rotWiggle;
     var _sizeWiggle = p.sizeWiggle;
 
-    // Flags
-    var _fWiggle = p.hasWiggle;
-    var _fPhysics = p.hasPhysics;
-    var _fColor = p.hasColorOverLife;
-    var _fAlpha = p.hasAlphaOverLife;
-    var _fSize = p.hasSizeOverLife;
-    var _fRot = p.hasRotation;
+    // Emitter-level flags (Share flags from type to avoid per-particle branching)
+    var fWiggle = type.hasWiggle;
+    var fPhysics = type.hasPhysics;
+    var fColor = type.hasColorOverLife;
+    var fAlpha = type.hasAlphaOverLife;
+    var fSize = type.hasSizeOverLife;
+    var fRot = type.hasRotation;
 
     while (i < count) {
       var idx = _active[i];
@@ -339,7 +353,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
       var nAge = 1.0 - (life / _maxLife[idx]); // Normalized age (0 to 1)
 
       // --- Physics & Movement ---
-      if (_fPhysics[idx]) {
+      if (fPhysics) {
         _speed[idx] += _speedIncr[idx] * dt;
         _zSpeed[idx] += _zSpeedIncr[idx] * dt;
 
@@ -347,7 +361,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
         var dirIncr = _dirIncr[idx];
 
         // Wiggle (Batch Random)
-        if (_fWiggle[idx]) {
+        if (fWiggle) {
           var r1 = randomTable[randomIndex++ & 1023];
           var r2 = randomTable[randomIndex++ & 1023];
 
@@ -356,8 +370,8 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
           if (_dirWiggle[idx] != 0) {
             dir += r1 * _dirWiggle[idx] * dt;
             _direction[idx] = dir;
-            _dirX[idx] = cos(dir);
-            _dirY[idx] = -sin(dir);
+            _dirX[idx] = fast_cos(dir);
+            _dirY[idx] = -fast_sin(dir);
           }
           if (_rotWiggle[idx] != 0) _rot[idx] += r2 * _rotWiggle[idx] * dt;
         }
@@ -365,8 +379,8 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
         if (dirIncr != 0) {
           dir += dirIncr * dt;
           _direction[idx] = dir;
-          _dirX[idx] = cos(dir);
-          _dirY[idx] = -sin(dir);
+          _dirX[idx] = fast_cos(dir);
+          _dirY[idx] = -fast_sin(dir);
         }
 
         // Velocity & Gravity
@@ -386,22 +400,24 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
       }
 
       // Rotation
-      if (_fRot[idx]) {
+      if (fRot) {
         _rot[idx] += _rotIncr[idx] * dt;
       }
 
-      // --- Visual Interpolation (Inline Lerp - Optimized with pre-calculated diffs) ---
-      if (_fSize[idx]) {
+      // --- Visual Interpolation & Quantization ---
+      if (fSize) {
         var size = _baseSize[idx] + _diffSize[idx] * nAge;
         if (_sizeWiggle[idx] != 0) size += randomTable[randomIndex++ & 1023] * _sizeWiggle[idx];
-        _size[idx] = size;
+        // Quantize size to avoid tiny CPU->GPU jitter
+        _size[idx] = floor(size * 256.0) * 0.00390625;
       }
 
-      if (_fAlpha[idx]) {
-        _alpha[idx] = _baseAlpha[idx] + _diffAlpha[idx] * nAge;
+      if (fAlpha) {
+        var alpha = _baseAlpha[idx] + _diffAlpha[idx] * nAge;
+        _alpha[idx] = floor(alpha * 256.0) * 0.00390625;
       }
 
-      if (_fColor[idx]) {
+      if (fColor) {
         _colorR[idx] = _baseColorR[idx] + _diffColorR[idx] * nAge;
         _colorG[idx] = _baseColorG[idx] + _diffColorG[idx] * nAge;
         _colorB[idx] = _baseColorB[idx] + _diffColorB[idx] * nAge;

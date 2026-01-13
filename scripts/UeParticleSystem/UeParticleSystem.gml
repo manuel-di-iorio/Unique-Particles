@@ -11,6 +11,7 @@ function UeParticleSystem() constructor {
   // LOD & Culling settings
   self.lodEnabled = true;
   self.frustumCulling = true;
+  self.sortingEnabled = true;
 
   /** 
   * Adds an emitter to the system. 
@@ -105,7 +106,7 @@ function UeParticleSystem() constructor {
           tex = type.texture;
           uvs = type.uvs;
         }
-        renderer.render(emitter.pool, camera, tex, uvs);
+        renderer.render(emitter.pool, camera, tex, uvs, self.sortingEnabled);
       }
       renderer.flush();
     }
@@ -122,7 +123,7 @@ function UeParticleSystem() constructor {
           tex = type.texture;
           uvs = type.uvs;
         }
-        renderer.render(emitter.pool, camera, tex, uvs);
+        renderer.render(emitter.pool, camera, tex, uvs, false);
       }
       renderer.flush();
     }

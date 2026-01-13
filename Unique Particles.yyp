@@ -27,6 +27,7 @@
     {"id":{"name":"UeParticleEmitter","path":"scripts/UeParticleEmitter/UeParticleEmitter.yy",},},
     {"id":{"name":"UeParticlePool","path":"scripts/UeParticlePool/UeParticlePool.yy",},},
     {"id":{"name":"UeParticleRenderer","path":"scripts/UeParticleRenderer/UeParticleRenderer.yy",},},
+    {"id":{"name":"UeParticlesMath","path":"scripts/UeParticlesMath/UeParticlesMath.yy",},},
     {"id":{"name":"UeParticleSystem","path":"scripts/UeParticleSystem/UeParticleSystem.yy",},},
     {"id":{"name":"UeParticleType","path":"scripts/UeParticleType/UeParticleType.yy",},},
     {"id":{"name":"sh_ue_particle","path":"shaders/sh_ue_particle/sh_ue_particle.yy",},},
