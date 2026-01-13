@@ -12,7 +12,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   self.rawBuffer = buffer_create(maxParticles * 6 * self.vsize, buffer_fixed, 1);
   buffer_fill(self.rawBuffer, 0, buffer_f32, 0, buffer_get_size(self.rawBuffer));
   
-  self.vbuffer = undefined;      // Current GPU vertex buffer
+  self.vbuffer = vertex_create_buffer_from_buffer(self.rawBuffer, self.vformat);
   self.writePointer = 0;         // Index for circular writing
   self.spawnedAny = false;       // Flag to trigger GPU buffer update
 
@@ -169,9 +169,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
    */
   static render = function (camera) {
     if (self.spawnedAny) {
-        if (self.vbuffer != undefined) vertex_delete_buffer(self.vbuffer);
-        self.vbuffer = vertex_create_buffer_from_buffer(self.rawBuffer, self.vformat);
-        vertex_freeze(self.vbuffer);
+        vertex_update_buffer_from_buffer(self.vbuffer, 0, self.rawBuffer);
         self.spawnedAny = false;
     }
     if (self.vbuffer == undefined || self.streamType == undefined) return;
