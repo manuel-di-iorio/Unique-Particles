@@ -1,16 +1,21 @@
+global.UE_PARTICLE_VERSION = "1.0.0";
 global.UE_PARTICLE_RENDER_FORMAT = undefined;
 
+/**
+ * @description State-of-the-art GPU Particle Renderer. 
+ * Orchestrates shaders, uniforms, and procedural textures.
+ */
 function UeParticleRenderer(_shaders = {}) constructor {
   gml_pragma("forceinline");
 
-  // ===== Vertex Format (52 bytes: Leggerissimo!) =====
+  // ===== Vertex Format (52 bytes) =====
   if (global.UE_PARTICLE_RENDER_FORMAT == undefined) {
     vertex_format_begin();
-    vertex_format_add_position_3d();                                      // 12 bytes
-    vertex_format_add_colour();                                           // 4 bytes
-    vertex_format_add_custom(vertex_type_float2, vertex_usage_texcoord);   // 8 bytes (CornerXY)
-    vertex_format_add_custom(vertex_type_float4, vertex_usage_texcoord);   // 16 bytes (VelXYZ + SpawnTime)
-    vertex_format_add_custom(vertex_type_float3, vertex_usage_texcoord);   // 12 bytes (MaxLife, sStart, rStart)
+    vertex_format_add_position_3d();                                      // in_Position (SpawnPos)
+    vertex_format_add_colour();                                           // in_Colour (Start)
+    vertex_format_add_custom(vertex_type_float2, vertex_usage_texcoord);   // in_TextureCoord (CornerXY)
+    vertex_format_add_custom(vertex_type_float4, vertex_usage_texcoord);   // in_TextureCoord1 (VelXYZ + SpawnTime)
+    vertex_format_add_custom(vertex_type_float3, vertex_usage_texcoord);   // in_TextureCoord2 (MaxLife, sStart, rStart)
     global.UE_PARTICLE_RENDER_FORMAT = vertex_format_end();
   }
   self.format = global.UE_PARTICLE_RENDER_FORMAT;
@@ -26,8 +31,16 @@ function UeParticleRenderer(_shaders = {}) constructor {
   self.uColE   = shader_get_uniform(self.shader, "u_ueColorEnd");
   self.uRotSpd = shader_get_uniform(self.shader, "u_ueRotSpeed");
 
-  // ===== Procedural Shape Generator (Restored) =====
+  // ===== Procedural Shape Generator =====
   self.shapes = {};
+  
+  /**
+   * @description Internal helper to create textured procedural shapes.
+   * @param {string} _name Identifier for the shape.
+   * @param {function} _drawFunc Function that draws the shape on a surface.
+   * @returns {struct} Struct containing texture and UV data.
+   * @private
+   */
   static __createShape = function (_name, _drawFunc) {
     var _res = 64;
     var _surf = surface_create(_res, _res);
@@ -38,10 +51,11 @@ function UeParticleRenderer(_shaders = {}) constructor {
     var _spr = sprite_create_from_surface(_surf, 0, 0, _res, _res, false, false, _res/2, _res/2);
     surface_free(_surf);
     var _tex = sprite_get_texture(_spr, 0), _uvs = texture_get_uvs(_tex);
-    self.shapes[$ _name] = { texture: _tex, uvs: [_uvs[0], _uvs[1], _uvs[2]-_uvs[0], _uvs[3]-_uvs[1]] };
+    self.shapes[$ _name] = { sprite: _spr, texture: _tex, uvs: [_uvs[0], _uvs[1], _uvs[2]-_uvs[0], _uvs[3]-_uvs[1]] };
     return self.shapes[$ _name];
   };
 
+  // Build standard shape library
   self.__createShape("point", function(r) { draw_circle(r/2, r/2, r/2-2, false); });
   self.__createShape("sphere", function(r) {
     gpu_set_blendmode(bm_add);
@@ -53,9 +67,24 @@ function UeParticleRenderer(_shaders = {}) constructor {
       for(var i=0; i<r/2; i++) { draw_line_width(m-i, m, m+i, m, 2); draw_line_width(m, m-i, m, m+i, 2); }
       draw_set_alpha(1); draw_circle(m, m, r/6, false);
   });
+  self.__createShape("square", function(r) { draw_rectangle(4, 4, r-5, r-5, false); });
+  self.__createShape("box", function(r) { draw_rectangle(4, 4, r-5, r-5, true); });
+  self.__createShape("disk", function(r) { draw_circle(r/2, r/2, r/2-2, false); });
+  self.__createShape("ring", function(r) {
+      draw_set_circle_precision(32);
+      draw_circle(r/2, r/2, r/2-2, true);
+      draw_circle(r/2, r/2, r/2-3, true); 
+  });
 
   self.fallbackTexture = self.shapes.sphere.texture;
 
+  /**
+   * @description Low-level submission of a vertex buffer to the GPU.
+   * Handles uniform updates and shader state.
+   * @param {UeParticleEmitter} emitter The emitter whose buffer will be submitted.
+   * @param {resource.camera} camera Reference camera for billboarding.
+   * @param {struct} type The particle type containing visual data (texture, uvs).
+   */
   static submit = function(emitter, camera, type) {
       gml_pragma("forceinline");
       shader_set(self.shader);

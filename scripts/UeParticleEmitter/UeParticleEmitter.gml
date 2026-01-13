@@ -1,21 +1,22 @@
 /**
-* @description Persistent emitter. Writes to a buffer once and lets the GPU do the heavy lifting.
+* @description Persistent emitter that manages particle spawning and circular GPU buffer updates.
+* Physics simulation and visual updates are handled entirely on the GPU.
 */
 function UeParticleEmitter(maxParticles = 5000) constructor {
   gml_pragma("forceinline");
   self.maxParticles = maxParticles;
   self.vformat = global.UE_PARTICLE_RENDER_FORMAT;
-  self.vsize = 52; // 52 bytes per vertex (3*4 Pos + 4 Color + 2*4 Corner + 4*4 VelTime + 3*4 LifeSizeRot)
+  self.vsize = 52; 
   
-  // RAW Buffer persistent (CPU-side)
+  // RAW Buffer persistent (CPU-side storage for vertex data)
   self.rawBuffer = buffer_create(maxParticles * 6 * self.vsize, buffer_fixed, 1);
   buffer_fill(self.rawBuffer, 0, buffer_f32, 0, buffer_get_size(self.rawBuffer));
   
-  self.vbuffer = undefined;
-  self.writePointer = 0; // Circular pointer
-  self.spawnedAny = false;
+  self.vbuffer = undefined;      // Current GPU vertex buffer
+  self.writePointer = 0;         // Index for circular writing
+  self.spawnedAny = false;       // Flag to trigger GPU buffer update
 
-  // Initial State
+  // --- Emission State ---
   self.streamType = undefined;
   self.streamRate = 0;
   self._accumulator = 0;
@@ -26,7 +27,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   self.visible = true;
   self.pool = { aliveCount: 0 }; 
 
-  // LOD & Culling settings
+  // --- LOD & Culling settings ---
   self.lodDistances = [500, 1000];
   self.lodRates = [1.0, 0.5, 0.1];
   self.lodLevel = 0;
@@ -34,7 +35,11 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   self.autoCullingRadius = true;
 
   /**
-   * Updates LOD level based on distance to camera.
+   * @description Updates the Level of Detail based on camera distance.
+   * @param {real} cx Camera X position.
+   * @param {real} cy Camera Y position.
+   * @param {real} cz Camera Z position.
+   * @returns {real} Current LOD level (0 = highest detail).
    */
   static updateLOD = function(cx, cy, cz) {
     gml_pragma("forceinline");
@@ -53,7 +58,9 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   }
 
   /**
-   * Estimates the maximum radius particles can reach from the center.
+   * @description Numerically estimates the maximum possible distance particles can travel 
+   * to define an accurate culling sphere.
+   * @returns {UeParticleEmitter} 
    */
   static computeCullingRadius = function() {
     gml_pragma("forceinline");
@@ -74,6 +81,17 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     return self;
   }
 
+  /**
+   * @description Defines the spawning region dimensions and shape.
+   * @param {string} s Shape type ("point", "box", "sphere").
+   * @param {real} x1 Top-left-near coordinate.
+   * @param {real} y1 ...
+   * @param {real} z1 ...
+   * @param {real} x2 Bottom-right-far coordinate.
+   * @param {real} y2 ...
+   * @param {real} z2 ...
+   * @returns {UeParticleEmitter}
+   */
   static region = function (s, x1, y1, z1, x2, y2, z2) {
     self.shape = s; self.centerX = (x1 + x2) * 0.5; self.centerY = (y1 + y2) * 0.5; self.centerZ = (z1 + z2) * 0.5;
     self.sizeX = abs(x2 - x1); self.sizeY = abs(y2 - y1); self.sizeZ = abs(z2 - z1); 
@@ -81,6 +99,12 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     return self;
   }
 
+  /**
+   * @description Starts a continuous particle stream.
+   * @param {UeParticleType} type Particle configuration to use.
+   * @param {real} rate Number of particles per second.
+   * @returns {UeParticleEmitter}
+   */
   static stream = function (t, r) { 
     self.streamType = t; 
     self.streamRate = r; 
@@ -89,8 +113,10 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
   }
 
   /**
-  * Spawns a particle by writing 6 vertices into the circular buffer.
-  */
+   * @description Instantiates a single particle by overwriting the oldest vertex data in the circular buffer.
+   * @param {UeParticleType} type The particle template.
+   * @returns {real} The circular buffer index used.
+   */
   static spawn = function (type) {
     var sx = self.centerX, sy = self.centerY, sz = self.centerZ;
     if (self.shape == "box") {
@@ -123,8 +149,13 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     self.writePointer = (self.writePointer + 1) % self.maxParticles;
     self.spawnedAny = true;
     self.pool.aliveCount = self.maxParticles; 
+    return self.writePointer;
   }
 
+  /**
+   * @description Handles periodic emission logic and update skipping for LOD.
+   * @param {real} dt Seconds elapsed since last update.
+   */
   static update = function (dt) {
     if (self.enabled && self.streamType != undefined && self.streamRate > 0) {
       self._accumulator += dt * self.streamRate * self.lodRates[self.lodLevel];
@@ -132,6 +163,10 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
     }
   }
 
+  /**
+   * @description Submits the emitter's internal GPU buffer for drawing if not culled.
+   * @param {resource.camera} camera Camera for billboard extraction.
+   */
   static render = function (camera) {
     if (self.spawnedAny) {
         if (self.vbuffer != undefined) vertex_delete_buffer(self.vbuffer);

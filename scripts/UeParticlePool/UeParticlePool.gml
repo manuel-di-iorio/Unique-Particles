@@ -1,6 +1,6 @@
 /** 
-* @description Ultra-performance SoA pool for GPU-simulated particles. 
-* Stores birth data (Initial position, velocity, etc.) to offload all physics to the shader.
+* @description Ultra-performance SoA (Structure of Arrays) pool for GPU-simulated particles. 
+* Stores birth data and manages a zero-allocation free list with O(1) operations.
 */
 function UeParticlePool(maxCount) constructor {
   gml_pragma("forceinline");
@@ -20,7 +20,6 @@ function UeParticlePool(maxCount) constructor {
   self.gravityY = array_create(maxCount, 0);
   self.gravityZ = array_create(maxCount, 0);
   
-  // Normalized 0..1 age is calculated as (maxLife - life) / maxLife
   self.life = array_create(maxCount, 0);
   self.maxLife = array_create(maxCount, 0);
   
@@ -33,18 +32,19 @@ function UeParticlePool(maxCount) constructor {
   self.rotStart = array_create(maxCount, 0);
   self.rotSpeed = array_create(maxCount, 0);
   
-  self.seed = array_create(maxCount, 0); // Random value for variety in shader
+  self.seed = array_create(maxCount, 0); 
 
-  // --- Active/Free List (Zero Allocations Runtime) ---
+  // --- Management Lists ---
   self.activeIndices = array_create(maxCount, 0);
   self.freeIndices = array_create(maxCount, 0);
   self.freeCount = maxCount;
 
-  // Initialize free list
+  // Initialize free list stack
   for (var i = 0; i < maxCount; i++) self.freeIndices[i] = i;
 
   /** 
-  * Allocate a new particle slot 
+  * @description Pops an index from the free list and moves it to the active list.
+  * @returns {real} The physical index in the SoA arrays, or -1 if full.
   */ 
   static allocate = function () {
     gml_pragma("forceinline");
@@ -55,7 +55,8 @@ function UeParticlePool(maxCount) constructor {
   }
 
   /**
-  * Free a particle slot using swap-remove
+  * @description Releases an active particle back to the free list.
+  * @param {real} activeIndex The position in the activeIndices array (not the physical index).
   */
   static free = function (activeIndex) {
     gml_pragma("forceinline");
@@ -66,11 +67,14 @@ function UeParticlePool(maxCount) constructor {
   }
   
   /**
-  * Optional: Batch kill by life (Called by Emitter)
+  * @description Efficiently decrements particle life and kills expired particles using swap-remove.
+  * @param {real} dt Delta time in seconds.
   */
   static updateLife = function(dt) {
     gml_pragma("forceinline");
     var count = self.aliveCount;
+    if (count <= 0) return;
+    
     var active = self.activeIndices;
     var lifeArr = self.life;
     var i = 0;
@@ -78,7 +82,6 @@ function UeParticlePool(maxCount) constructor {
         var idx = active[i];
         lifeArr[idx] -= dt;
         if (lifeArr[idx] <= 0) {
-            // Free it
             self.freeIndices[self.freeCount++] = idx;
             count--;
             active[i] = active[count];

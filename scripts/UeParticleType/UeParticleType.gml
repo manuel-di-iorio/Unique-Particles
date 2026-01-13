@@ -1,19 +1,21 @@
 /**
- * @description A container for particle properties, similar to GM's part_type.
+ * @description A configuration container that defines look, behavior, and physics of particles.
+ * Use method chaining to configure properties.
  */
 function UeParticleType() constructor {
     gml_pragma("forceinline");
-    // Life
+    
+    // --- Lifecycle ---
     self.lifeMin = 1.0;
     self.lifeMax = 1.0;
     
-    // Size
+    // --- Scale ---
     self.sizeMin = 1.0;
     self.sizeMax = 1.0;
     self.sizeIncr = 0.0;
     self.sizeWiggle = 0.0;
     
-    // Speed & Direction (Radians)
+    // --- 3D Movement ---
     self.speedMin = 0.0;
     self.speedMax = 0.0;
     self.speedIncr = 0.0;
@@ -24,9 +26,9 @@ function UeParticleType() constructor {
     self.dirIncr = 0.0;
     self.dirWiggle = 0.0;
     
-    // Gravity (Radians)
+    // --- Physics ---
     self.gravAmount = 0.0;
-    self.gravDir = 1.5 * pi; // 270 degrees in radians
+    self.gravDir = 1.5 * pi; 
     
     self.zSpeedMin = 0.0;
     self.zSpeedMax = 0.0;
@@ -34,76 +36,33 @@ function UeParticleType() constructor {
     self.zSpeedWiggle = 0.0;
     self.zGravAmount = 0.0;
     
-    // Rotation (Radians)
+    // --- Rotation ---
     self.rotMin = 0.0;
     self.rotMax = 0.0;
     self.rotIncr = 0.0;
     self.rotWiggle = 0.0;
     
-    // Color & Alpha (using arrays [r,g,b] for internal processing)
+    // --- Visuals ---
     self.colorStart = [1.0, 1.0, 1.0];
     self.colorEnd   = [1.0, 1.0, 1.0];
     self.alphaStart = 1.0;
     self.alphaEnd   = 1.0;
     
-    // Visuals
     self.sprite = -1;
     self.texture = -1;
-    self.uvs = [0, 0, 1, 1]; // [x, y, w, h]
+    self.uvs = [0, 0, 1, 1]; 
     self.additive = false;
 
-    // Feature Flags & Pre-calculations (Auto-calculated for optimization)
-    self.hasWiggle = false;
-    self.hasGravity = false;
-    self.hasColorOverLife = false;
-    self.hasAlphaOverLife = false;
-    self.hasSizeOverLife = false;
-    self.hasRotation = false;
-    self.hasPhysics = false; // speed, direction, gravity
-
-    // Range Diffs
-    self.lifeDiff = 0.0;
-    self.sizeDiff = 0.0;
-    self.speedDiff = 0.0;
-    self.zSpeedDiff = 0.0;
-    self.dirDiff = 0.0;
-    self.rotDiff = 0.0;
-    
-    // Pre-computed vectors
+    // --- Internal Flags & Optimized Values ---
     self.gravX = 0.0;
     self.gravY = 0.0;
 
-    self.setShape("sphere");
-
     /**
-     * Re-calculates feature flags and diffs to optimize update loop and spawning.
+     * @description Sets the minimum and maximum lifetime of particles in seconds.
+     * @param {real} minVal Minimum lifetime.
+     * @param {real} maxVal Maximum lifetime.
+     * @returns {UeParticleType}
      */
-    static updateFlags = function() {
-        gml_pragma("forceinline");
-        self.hasWiggle = (self.sizeWiggle != 0 || self.speedWiggle != 0 || self.zSpeedWiggle != 0 || self.dirWiggle != 0 || self.rotWiggle != 0);
-        self.hasGravity = (self.gravAmount != 0 || self.zGravAmount != 0);
-        self.hasColorOverLife = (self.colorStart[0] != self.colorEnd[0] || self.colorStart[1] != self.colorEnd[1] || self.colorStart[2] != self.colorEnd[2]);
-        self.hasAlphaOverLife = (self.alphaStart != self.alphaEnd);
-        self.hasSizeOverLife = (self.sizeIncr != 0 || self.sizeWiggle != 0);
-        self.hasRotation = (self.rotMin != 0 || self.rotMax != 0 || self.rotIncr != 0 || self.rotWiggle != 0);
-        self.hasPhysics = (self.speedMin != 0 || self.speedMax != 0 || self.speedIncr != 0 || self.zSpeedMin != 0 || self.zSpeedMax != 0 || self.zSpeedIncr != 0 || self.dirIncr != 0 || self.hasGravity);
-        
-        // Pre-calculate diffs
-        self.lifeDiff = self.lifeMax - self.lifeMin;
-        self.sizeDiff = self.sizeMax - self.sizeMin;
-        self.speedDiff = self.speedMax - self.speedMin;
-        self.zSpeedDiff = self.zSpeedMax - self.zSpeedMin;
-        self.dirDiff = self.dirMax - self.dirMin;
-        self.rotDiff = self.rotMax - self.rotMin;
-        
-        // Pre-calculate gravity vectors
-        self.gravX = cos(self.gravDir) * self.gravAmount;
-        self.gravY = -sin(self.gravDir) * self.gravAmount;
-        
-        return self;
-    }
-
-    // Fluent API Methods
     static setLife = function(minVal, maxVal) {
         gml_pragma("forceinline");
         self.lifeMin = minVal;
@@ -111,16 +70,33 @@ function UeParticleType() constructor {
         return self;
     }
     
+    /**
+     * @description Sets the size range and transformation over life.
+     * @param {real} minVal Initial minimum size.
+     * @param {real} maxVal Initial maximum size.
+     * @param {real} incr Value added to size every second.
+     * @param {real} wiggle Random size fluctuation per frame (CPU-side only).
+     * @returns {UeParticleType}
+     */
     static setSize = function(minVal, maxVal, incr = 0, wiggle = 0) {
         gml_pragma("forceinline");
         self.sizeMin = minVal;
         self.sizeMax = maxVal;
         self.sizeIncr = incr;
         self.sizeWiggle = wiggle;
-        self.updateFlags();
         return self;
     }
     
+    /**
+     * @description Sets the initial 3D velocity and its behavior over time.
+     * @param {real} zMin Minimum vertical speed (Z).
+     * @param {real} zMax Maximum vertical speed (Z).
+     * @param {real} xyMin Minimum horizontal speed (XY).
+     * @param {real} xyMax Maximum horizontal speed (XY).
+     * @param {real} zIncr Vertical acceleration per second.
+     * @param {real} xyIncr Horizontal acceleration per second.
+     * @returns {UeParticleType}
+     */
     static setSpeed = function(zMin, zMax, xyMin = 0, xyMax = 0, zIncr = 0, xyIncr = 0, zWiggle = 0, xyWiggle = 0) {
         gml_pragma("forceinline");
         self.zSpeedMin = zMin;
@@ -132,40 +108,64 @@ function UeParticleType() constructor {
         self.speedMax = xyMax;
         self.speedIncr = xyIncr;
         self.speedWiggle = xyWiggle;
-        
-        self.updateFlags();
         return self;
     }
     
+    /**
+     * @description Sets the horizontal direction range and behavior.
+     * @param {real} minVal Minimum direction in degrees.
+     * @param {real} maxVal Maximum direction in degrees.
+     * @param {real} incr Rotation of movement vector in degrees per second.
+     * @returns {UeParticleType}
+     */
     static setDirection = function(minVal, maxVal, incr = 0, wiggle = 0) {
         gml_pragma("forceinline");
         self.dirMin = degtorad(minVal);
         self.dirMax = degtorad(maxVal);
         self.dirIncr = degtorad(incr);
         self.dirWiggle = degtorad(wiggle);
-        self.updateFlags();
         return self;
     }
     
+    /**
+     * @description Applies constant gravity force.
+     * @param {real} amountZ Vertical gravity amount.
+     * @param {real} amountXY Horizontal gravity amount.
+     * @param {real} dirXY Horizontal gravity direction in degrees.
+     * @returns {UeParticleType}
+     */
     static setGravity = function(amountZ, amountXY = 0, dirXY = 270) {
         gml_pragma("forceinline");
         self.zGravAmount = amountZ;
         self.gravAmount = amountXY;
         self.gravDir = degtorad(dirXY);
-        self.updateFlags();
+        self.gravX = cos(self.gravDir) * self.gravAmount;
+        self.gravY = -sin(self.gravDir) * self.gravAmount;
         return self;
     }
     
+    /**
+     * @description Sets the rotation range and behavior.
+     * @param {real} minVal Initial minimum rotation in degrees.
+     * @param {real} maxVal Initial maximum rotation in degrees.
+     * @param {real} incr Rotation speed in degrees per second.
+     * @returns {UeParticleType}
+     */
     static setRotation = function(minVal, maxVal, incr = 0, wiggle = 0) {
         gml_pragma("forceinline");
         self.rotMin = degtorad(minVal);
         self.rotMax = degtorad(maxVal);
         self.rotIncr = degtorad(incr);
         self.rotWiggle = degtorad(wiggle);
-        self.updateFlags();
         return self;
     }
     
+    /**
+     * @description Sets start and end colors for GPU interpolation.
+     * @param {constant.color} color1 Starting color.
+     * @param {constant.color} color2 Ending color (optional, defaults to color1).
+     * @returns {UeParticleType}
+     */
     static setColor = function(color1, color2 = undefined) {
         gml_pragma("forceinline");
         self.colorStart = [color_get_red(color1)/255, color_get_green(color1)/255, color_get_blue(color1)/255];
@@ -174,24 +174,39 @@ function UeParticleType() constructor {
         } else {
             self.colorEnd = self.colorStart;
         }
-        self.updateFlags();
         return self;
     }
     
+    /**
+     * @description Sets start and end transparency for GPU interpolation.
+     * @param {real} alpha1 Starting alpha (0-1).
+     * @param {real} alpha2 Ending alpha (optional, defaults to alpha1).
+     * @returns {UeParticleType}
+     */
     static setAlpha = function(alpha1, alpha2 = undefined) {
         gml_pragma("forceinline");
         self.alphaStart = alpha1;
         self.alphaEnd = (alpha2 != undefined) ? alpha2 : alpha1;
-        self.updateFlags();
         return self;
     }
     
+    /**
+     * @description toggles additive blending for this particle type.
+     * @param {bool} enable True for bm_add, false for bm_normal.
+     * @returns {UeParticleType}
+     */
     static setAdditive = function(enable) {
         gml_pragma("forceinline");
         self.additive = enable;
         return self;
     }
     
+    /**
+     * @description Sets a GameMaker sprite as the texture source.
+     * @param {resource.sprite} sprite Sprite index.
+     * @param {real} subimg Sub-image index.
+     * @returns {UeParticleType}
+     */
     static setSprite = function(sprite, subimg = 0) {
         gml_pragma("forceinline");
         self.sprite = sprite;
@@ -204,8 +219,9 @@ function UeParticleType() constructor {
     }
 
     /**
-     * Set a procedural shape from the global renderer.
-     * @param {string} shapeName "point", "sphere", "flare", "square", "box", "disk", "ring"
+     * @description Sets the particle texture to a built-in procedural shape.
+     * @param {string} shapeName "point", "sphere", "flare", "square", "box", "disk", "ring".
+     * @returns {UeParticleType}
      */
     static setShape = function(shapeName) {
         gml_pragma("forceinline");
@@ -216,4 +232,7 @@ function UeParticleType() constructor {
         }
         return self;
     }
+    
+    // Default initial shape
+    self.setShape("sphere");
 }

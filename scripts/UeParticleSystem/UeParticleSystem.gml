@@ -1,6 +1,5 @@
 /** 
-* @description Manages a group of emitters and handles their rendering. 
-* Similar to GM's part_system. 
+* @description Manages a group of particle emitters and handles high-level culling and LOD.
 */
 function UeParticleSystem() constructor {
   gml_pragma("forceinline");
@@ -8,17 +7,28 @@ function UeParticleSystem() constructor {
   self.renderer = global.UE_PARTICLE_RENDERER;
   self.enabled = true;
 
-  // LOD & Culling settings
   self.lodEnabled = true;
   self.frustumCulling = true;
-  self.sortingEnabled = false;
+  self.sortingEnabled = false; 
 
+  /** 
+  * @description Registers an emitter within this system.
+  * @param {UeParticleEmitter} emitter The emitter instance.
+  * @returns {UeParticleEmitter}
+  */ 
   static addEmitter = function (emitter) {
     gml_pragma("forceinline");
     array_push(self.emitters, emitter);
     return emitter;
   }
 
+  /** 
+  * @description Updates all managed emitters. Handles LOD calculations and emission.
+  * @param {real} dt Delta time in seconds (optional).
+  * @param {real} cx Camera X position for LOD (optional).
+  * @param {real} cy Camera Y position for LOD (optional).
+  * @param {real} cz Camera Z position for LOD (optional).
+  */ 
   static update = function (dt = undefined, cx = undefined, cy = undefined, cz = undefined) {
     gml_pragma("forceinline");
     if (!self.enabled) return;
@@ -42,7 +52,8 @@ function UeParticleSystem() constructor {
   }
 
   /** 
-  * Renders all emitters using their internal persistent buffers.
+  * @description Calls render on all visible emitters. Handles blend modes automatically.
+  * @param {resource.camera} camera Camera index to use for billboarding extraction.
   */ 
   static render = function (camera = undefined) {
     gml_pragma("forceinline");
@@ -56,9 +67,12 @@ function UeParticleSystem() constructor {
     for (var i = 0, il = array_length(emitters); i < il; i++) {
       var emitter = emitters[i];
       
+      // Perform Frustum Culling via GameMaker's native sphere visibility check
       if (culling) {
           emitter.visible = sphere_is_visible(emitter.centerX, emitter.centerY, emitter.centerZ, emitter.cullingRadius);
-      } else { emitter.visible = true; }
+      } else { 
+          emitter.visible = true; 
+      }
 
       if (emitter.visible && emitter.pool.aliveCount > 0) {
         var type = emitter.streamType;
@@ -71,6 +85,10 @@ function UeParticleSystem() constructor {
     gpu_set_blendmode(_bm);
   }
 
+  /** 
+  * @description Returns the total number of active particles across all emitters.
+  * @returns {real}
+  */ 
   static getTotalParticles = function () {
     var total = 0;
     for (var i = 0; i < array_length(self.emitters); i++) total += self.emitters[i].pool.aliveCount;

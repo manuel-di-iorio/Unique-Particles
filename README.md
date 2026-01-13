@@ -1,5 +1,5 @@
 # Unique Particles 🚀
-### Ultra-Performance GPU Particle Engine for GameMaker
+### Ultra-Performant 3D Particle Engine for GameMaker
 
 Unique Particles is a state-of-the-art particle system that offloads 100% of particle simulation, physics, and visual interpolation to the GPU. By using **Circular Persistent Buffers** and a **Time-Based Simulation**, it achieves a near-zero CPU footprint even with tens of thousands of active particles.
 
@@ -16,23 +16,43 @@ The engine is built on four core architectural pillars:
 
 ---
 
-## ⚡ Scalability Benchmarks
-*Tested on mid-range GPU (GMS2 VM)*
-
-| Particles | CPU Usage | GPU Wait | Visual Fluidity |
-|-----------|-----------|----------|-----------------|
-| 10,000    | 0.1ms     | Negligible| Solid 60 FPS   |
-| 50,000    | 0.4ms     | ~15%     | Solid 60 FPS    |
-| 100,000   | 1.1ms     | ~40%     | ~55-60 FPS      |
-
----
-
 ## 🧬 System Architecture
 
 1. **[UeParticleType](scripts/UeParticleType/UeParticleType.gml)**: The template. Defines visuals, physics, and life ranges.
-2. **[UeParticleEmitter](scripts/UeParticleEmitter/UeParticleEmitter.gml)**: The worker. Manages the **Circular Buffer** and decides *when* and *where* to spawn.
-3. **[UeParticleRenderer](scripts/UeParticleRenderer/UeParticleRenderer.gml)**: The orchestrator. manages the Vertex Format, Shaders, and Uniforms.
+2. **[UeParticleEmitter](scripts/UeParticleEmitter/UeParticleEmitter.gml)**: The worker. Manages the **Circular Buffer** and decides *when* and *where* to spawn particles.
+3. **[UeParticleRenderer](scripts/UeParticleRenderer/UeParticleRenderer.gml)**: The orchestrator. Manages the Vertex Format, Shaders, and Uniforms.
 4. **[UeParticleSystem](scripts/UeParticleSystem/UeParticleSystem.gml)**: The manager. Handles LOD, Frustum Culling, and global updates.
+
+---
+
+## 🛠️ UeParticleType API
+
+`UeParticleType` is the core of particle definition. It uses a fluent interface (method chaining) for clear and fast configuration.
+
+### Configuration Methods
+
+-   **`.setLife(min, max)`**: Lifetime in seconds.
+-   **`.setSize(min, max, [incr], [wiggle])`**: Initial size and transformation over time.
+-   **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration.
+-   **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
+-   **`.setGravity(amountZ, [amountXY], [dirXY])`**: Constant gravity applied to particles.
+-   **`.setColor(color1, [color2])`**: Start and end color (interpolation handled by GPU).
+-   **`.setAlpha(alpha1, [alpha2])`**: Start and end transparency.
+-   **`.setAdditive(bool)`**: Enables additive blend mode.
+-   **`.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
+-   **`.setShape(name)`**: Uses a pre-defined procedural shape.
+
+### 🎨 Procedural Shapes
+
+The engine automatically generates procedural textures to avoid loading external sprites for common effects:
+
+*   **`"point"`**: A solid circular point with slight antialiasing.
+*   **`"sphere"`**: A soft particle with radial decay, perfect for smoke, glows, and fire.
+*   **`"flare"`**: A cross-flare effect with a bright core, ideal for sparks.
+*   **`"square"`**: A solid filled square.
+*   **`"box"`**: A hollow square frame.
+*   **`"disk"`**: A sharp, flat filled circle.
+*   **`"ring"`**: A hollow circular ring with a thick border.
 
 ---
 
@@ -86,5 +106,4 @@ This ensures perfect visibility checks with `sphere_is_visible`.
 Automatic emission scaling based on distance. Far emitters will spawn fewer particles, significantly reducing overdraw and buffer updates without affecting the "density" of the scene.
 
 ---
-Developed with ❤️ by Antigravity & Manuel.
-Final Refactor: **The Circular-Persistent GPU Model.**
+Developed with ❤️ by Emmanuel Di Iorio - MIT License
