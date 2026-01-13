@@ -37,7 +37,9 @@ The engine is built on six core architectural pillars:
 
 -   **`.setLife(min, max)`**: Lifetime in seconds.
 -   **`.setSize(min, max, [incr], [wiggle])`**: Initial size and transformation over time.
--   **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration.
+-   **`.setScale(sx, sy)`**: **(v1.1)** Set aspect ratio for the particle quad.
+-   **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration (supports 3D).
+-   **`.setDrag(value)`**: **(v1.1)** Air resistance (0-1). Slows down particles over time.
 -   **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
 -   **`.setGravity(amountZ, [amountXY], [dirXY])`**: Constant gravity applied to particles.
 -   **`.setColor(color1, [color2])`**: Start and end color (interpolation handled by GPU).
@@ -57,6 +59,7 @@ The engine automatically generates procedural textures to avoid loading external
 *   **`"box"`**: A hollow square frame.
 *   **`"disk"`**: A sharp, flat filled circle.
 *   **`"ring"`**: A hollow circular ring with a thick border.
+*   **`"smoke"`**: Multi-layered soft noise for volumetric effects.
 
 ---
 
@@ -82,7 +85,10 @@ fireType = new UeParticleType()
 // 5000 particle max per emitter
 myEmitter = mySystem.addEmitter(new UeParticleEmitter(5000));
 myEmitter.region("box", -10, -10, 0, 10, 10, 5);
+
+// Different emission modes
 myEmitter.stream(fireType, 100); // 100 particles/sec
+myEmitter.burst(sparkType, 50);  // Instant 50 particles
 ```
 
 ### 3. Loop
