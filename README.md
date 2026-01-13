@@ -34,9 +34,8 @@ Unique Particles is a state-of-the-art particle system that offloads 100% of par
 - `.setAlpha(a1, [a2])`: Set start and end transparency.
 - `.setGlow(intensity)`: Set emissive intensity for HDR/Bloom
 - `.setAnimation(xFrames, yFrames, speed)`: Configure flipbook sprite animation
-- **`.setAdditive(bool)`**: Enables additive blend mode.
-- **`.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
-- **`.setShape(name)`**: Uses a pre-defined procedural shape.
+- `.setSprite(sprite, [subimg])`**: Uses a GameMaker sprite as a texture.
+- `.setShape(name)`: Uses a pre-defined procedural shape.
 
 ### 🎨 Procedural Shapes
 
@@ -59,11 +58,15 @@ The engine automatically generates procedural textures for common effects:
 
 - **`.addEmitter(emitter)`**: Adds an emitter to the system.
 - **`.update([dt], [cx], [cy], [cz])`**: Updates all emitters.
-- **`.render([camera], [depthTex], [softness], [near], [far])`**: Renders all visible emitters.
+- **`.render([camera], [depthTex], [softness], [near], [far], [shadowTex], [shadowMatrix], [shadowStrength], [shadowBias])`**: Renders all visible emitters.
     - `camera`: Camera resource (defaults to `view_camera[0]`).
     - `depthTex`: Optional depth texture for **Soft Particles** (e.g., from `surface_get_texture_depth`).
     - `softness`: Strength of depth blending (default 100).
     - `near`/`far`: Camera clipping planes for depth linearization.
+    - `shadowTex`: Optional shadow map texture for particle shadowing.
+    - `shadowMatrix`: 4x4 matrix for shadow map projection.
+    - `shadowStrength`: Intensity of shadows (0-1).
+    - `shadowBias`: Offset to prevent shadow acne.
 - **`.burst(count)`**: Bursts particles on all emitters with a stream type.
 - **`.clear()`**: Resets all emitters.
 
@@ -117,6 +120,7 @@ The engine is built on high-performance architectural pillars designed for moder
 - **Color Curves**: Support for 3-way color gradients (Start -> Mid -> End) for complex transitions.
 - **Flipbook Animation**: GPU-side sprite sheet animation support.
 - **Emissive Glow**: Intensity control for HDR-ready glowing effects.
+- **Shadow Mapping Support**: Can receive external shadow maps and matrices to allow particles to receive shadows from the environment.
 - **Analytical Frustum Culling**: Calculates a **Dynamic Culling Sphere** using the physical limits of the particle type.
 - **Distance LOD**: Automatic emission scaling based on camera distance to reduce overdraw and GPU fill-rate pressure.
 

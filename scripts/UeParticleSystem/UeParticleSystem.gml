@@ -54,8 +54,16 @@ function UeParticleSystem() constructor {
   /** 
   * @description Calls render on all visible emitters. Handles blend modes automatically.
   * @param {resource.camera} camera Camera index to use for billboarding extraction.
+  * @param {texture} depthTex Optional depth texture for soft particles.
+  * @param {real} softness Amount of softness (default 100).
+  * @param {real} near Near plane (optional, for linearization).
+  * @param {real} far Far plane (optional, for linearization).
+  * @param {texture} shadowTex Optional shadow map texture.
+  * @param {array} shadowMatrix 4x4 matrix for shadow projection.
+  * @param {real} shadowStrength Amount of shadowing (0-1).
+  * @param {real} shadowBias Bias to avoid shadow acne.
   */ 
-  static render = function (camera = undefined) {
+  static render = function (camera = undefined, depthTex = undefined, softness = 100, near = 0.1, far = 1000, shadowTex = undefined, shadowMatrix = undefined, shadowStrength = 0.5, shadowBias = 0.001) {
     gml_pragma("forceinline");
     if (!self.enabled) return;
     camera ??= view_camera[0];
@@ -63,6 +71,8 @@ function UeParticleSystem() constructor {
     var emitters = self.emitters;
     var culling = self.frustumCulling;
     var _bm = gpu_get_blendmode();
+    var _depthParams = [near, far, softness];
+    var _shadowParams = [shadowStrength, shadowBias, 0]; // Resolution not used for now
 
     for (var i = 0, il = array_length(emitters); i < il; i++) {
       var emitter = emitters[i];
@@ -78,7 +88,7 @@ function UeParticleSystem() constructor {
         var type = emitter.streamType;
         if (type != undefined) {
             gpu_set_blendmode(type.additive ? bm_add : bm_normal);
-            emitter.render(camera);
+            emitter.render(camera, depthTex, _depthParams, shadowTex, shadowMatrix, _shadowParams);
         }
       }
     }

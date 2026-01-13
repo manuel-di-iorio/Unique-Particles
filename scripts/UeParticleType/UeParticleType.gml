@@ -8,6 +8,7 @@ function UeParticleType() constructor {
     // --- Lifecycle ---
     self.lifeMin = 1.0;
     self.lifeMax = 1.0;
+    self.avgLife = 1.0;
     
     // --- Scale ---
     self.sizeMin = 1.0;
@@ -44,9 +45,19 @@ function UeParticleType() constructor {
     
     // --- Visuals ---
     self.colorStart = [1.0, 1.0, 1.0];
+    self.colorMid   = [1.0, 1.0, 1.0];
     self.colorEnd   = [1.0, 1.0, 1.0];
+    self.colorMidTime = 0.5; // 0 to 1
+    
     self.alphaStart = 1.0;
     self.alphaEnd   = 1.0;
+    
+    self.glow = 1.0;
+    
+    // --- Animation (Flipbook) ---
+    self.animFramesX = 1;
+    self.animFramesY = 1;
+    self.animSpeed = 1.0; // 1.0 = once over lifetime
     
     self.sprite = -1;
     self.texture = -1;
@@ -70,6 +81,7 @@ function UeParticleType() constructor {
         gml_pragma("forceinline");
         self.lifeMin = minVal;
         self.lifeMax = maxVal;
+        self.avgLife = (minVal + maxVal) * 0.5;
         return self;
     }
     
@@ -164,19 +176,58 @@ function UeParticleType() constructor {
     }
     
     /**
-     * @description Sets start and end colors for GPU interpolation.
+     * @description Sets start, middle, and end colors for GPU interpolation.
      * @param {constant.color} color1 Starting color.
-     * @param {constant.color} color2 Ending color (optional, defaults to color1).
+     * @param {constant.color} color2 Ending color (optional).
+     * @param {constant.color} color3 Middle color (optional).
+     * @param {real} midTime Point in life (0-1) where color3 is reached.
      * @returns {UeParticleType}
      */
-    static setColor = function(color1, color2 = undefined) {
+    static setColor = function(color1, color2 = undefined, color3 = undefined, midTime = 0.5) {
         gml_pragma("forceinline");
         self.colorStart = [color_get_red(color1)/255, color_get_green(color1)/255, color_get_blue(color1)/255];
-        if (color2 != undefined) {
+        
+        if (color2 != undefined && color3 == undefined) {
+            // Simple 2-way
             self.colorEnd = [color_get_red(color2)/255, color_get_green(color2)/255, color_get_blue(color2)/255];
+            self.colorMid = self.colorStart;
+            self.colorMidTime = 0.0;
+        } else if (color2 != undefined && color3 != undefined) {
+            // 3-way: color1 -> color3 -> color2
+            self.colorEnd = [color_get_red(color2)/255, color_get_green(color2)/255, color_get_blue(color2)/255];
+            self.colorMid = [color_get_red(color3)/255, color_get_green(color3)/255, color_get_blue(color3)/255];
+            self.colorMidTime = midTime;
         } else {
             self.colorEnd = self.colorStart;
+            self.colorMid = self.colorStart;
+            self.colorMidTime = 0.0;
         }
+        return self;
+    }
+    
+    /**
+     * @description Sets the emissive glow intensity (multiplies color values).
+     * @param {real} val Glow intensity (1.0 = normal).
+     * @returns {UeParticleType}
+     */
+    static setGlow = function(val) {
+        gml_pragma("forceinline");
+        self.glow = val;
+        return self;
+    }
+
+    /**
+     * @description Configures sprite sheet animation (Flipbook).
+     * @param {real} xFrames Number of columns in the sprite sheet.
+     * @param {real} yFrames Number of rows in the sprite sheet.
+     * @param {real} speed How many times to cycle the animation over the particle's life.
+     * @returns {UeParticleType}
+     */
+    static setAnimation = function(xFrames, yFrames, speed = 1.0) {
+        gml_pragma("forceinline");
+        self.animFramesX = xFrames;
+        self.animFramesY = yFrames;
+        self.animSpeed = speed;
         return self;
     }
     

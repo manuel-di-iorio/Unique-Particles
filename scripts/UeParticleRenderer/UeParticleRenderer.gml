@@ -1,4 +1,4 @@
-global.UE_PARTICLE_VERSION = "1.1.0";
+global.UE_PARTICLE_VERSION = "1.2.0";
 global.UE_PARTICLE_RENDER_FORMAT = undefined;
 
 /**
@@ -39,6 +39,10 @@ function UeParticleRenderer(_shaders = {}) constructor {
   
   self.uDepthTex = shader_get_sampler_index(self.shader, "u_ueDepthTex");
   self.uDepthParams = shader_get_uniform(self.shader, "u_ueDepthParams");
+
+  self.uShadowTex = shader_get_sampler_index(self.shader, "u_ueShadowTex");
+  self.uShadowMatrix = shader_get_uniform(self.shader, "u_ueShadowMatrix");
+  self.uShadowParams = shader_get_uniform(self.shader, "u_ueShadowParams");
 
   // ===== Procedural Shape Generator =====
   self.shapes = {};
@@ -105,8 +109,11 @@ function UeParticleRenderer(_shaders = {}) constructor {
    * @param {struct} type The particle type containing visual data (texture, uvs).
    * @param {texture} depthTex Optional depth texture for soft particles.
    * @param {array} depthParams [near, far, softness, enabled]
+   * @param {texture} shadowTex Optional shadow map texture.
+   * @param {array} shadowMatrix 4x4 matrix for shadow projection.
+   * @param {array} shadowParams [strength, bias, resolution, enabled]
    */
-  static submit = function(emitter, camera, type, depthTex = undefined, depthParams = undefined) {
+  static submit = function(emitter, camera, type, depthTex = undefined, depthParams = undefined, shadowTex = undefined, shadowMatrix = undefined, shadowParams = undefined) {
       gml_pragma("forceinline");
       shader_set(self.shader);
       var vm = camera_get_view_mat(camera);
@@ -131,6 +138,16 @@ function UeParticleRenderer(_shaders = {}) constructor {
           shader_set_uniform_f(self.uDepthParams, depthParams[0], depthParams[1], depthParams[2], 1.0);
       } else {
           shader_set_uniform_f(self.uDepthParams, 0, 0, 0, 0);
+      }
+
+      if (shadowTex != undefined && shadowMatrix != undefined && shadowParams != undefined) {
+          texture_set_stage(self.uShadowTex, shadowTex);
+          shader_set_uniform_matrix_array(self.uShadowMatrix, shadowMatrix);
+          shader_set_uniform_f(self.uShadowParams, shadowParams[0], shadowParams[1], shadowParams[2], 1.0);
+      } else {
+          static identity = matrix_build_identity();
+          shader_set_uniform_matrix_array(self.uShadowMatrix, identity);
+          shader_set_uniform_f(self.uShadowParams, 0, 0, 0, 0);
       }
 
       gpu_set_zwriteenable(false);

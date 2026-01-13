@@ -205,8 +205,11 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
    * @param {resource.camera} camera Camera for billboard extraction.
    * @param {texture} depthTex Optional depth texture.
    * @param {array} depthParams [near, far, softness]
+   * @param {texture} shadowTex Optional shadow map texture.
+   * @param {array} shadowMatrix 4x4 matrix for shadow projection.
+   * @param {array} shadowParams [strength, bias, resolution]
    */
-  static render = function (camera, depthTex = undefined, depthParams = undefined) {
+  static render = function (camera, depthTex = undefined, depthParams = undefined, shadowTex = undefined, shadowMatrix = undefined, shadowParams = undefined) {
     if (self.isDestroyed) return;
     if (self.spawnedAny) {
         if (self.lastOffset > self.firstOffset) {
@@ -219,7 +222,7 @@ function UeParticleEmitter(maxParticles = 5000) constructor {
         self.spawnedAny = false;
     }
     if (self.vbuffer == undefined || self.streamType == undefined) return;
-    global.UE_PARTICLE_RENDERER.submit(self, camera, self.streamType, depthTex, depthParams);
+    global.UE_PARTICLE_RENDERER.submit(self, camera, self.streamType, depthTex, depthParams, shadowTex, shadowMatrix, shadowParams);
   }
 
   /**
