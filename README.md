@@ -1,6 +1,8 @@
 # Unique Particles 🚀
 ### Ultra-Performant 3D Particle Engine for GameMaker
 
+![alt text](screen.png)
+
 Unique Particles is a state-of-the-art particle system that offloads 100% of particle simulation, physics, and visual interpolation to the GPU. By using **Circular Persistent Buffers** and a **Time-Based Simulation**, it achieves a near-zero CPU footprint even with tens of thousands of active particles.
 
 ---
@@ -102,7 +104,7 @@ The system uses the `vertex_create_buffer_from_buffer` approach to push data fro
 ### Analytical Frustum Culling
 Instead of a simple bounding box, the system calculates a **Dynamic Culling Sphere**. The radius is determined analytically using the physical limits of the particle type:
 `Radius = ShapeSize + (MaxSpeed * MaxLife + 0.5 * Gravity * MaxLife^2)`
-This ensures 100% accurate visibility checks. The system then leverages GameMaker's native `sphere_is_visible` function, which is highly optimized and much faster than manual CPU-side frustum extraction and plane intersection.
+This ensures 100% accurate visibility checks. The system then leverages GameMaker's native `sphere_is_visible` function.
 
 ### Soft Particles (Ground Fading)
 To prevent ugly "sharp edges" when particles intersect with the ground (Z=0), the engine implements **GPU-side Ground Softness**.
