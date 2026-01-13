@@ -1,411 +1,145 @@
 /**
- * @description Handles particle spawning, management and lifecycle logic.
- * Each emitter now owns its own pool of particles.
- */
-function UeParticleEmitter(maxParticles = 1000) constructor {
+* @description Persistent emitter. Writes to a buffer once and lets the GPU do the heavy lifting.
+*/
+function UeParticleEmitter(maxParticles = 5000) constructor {
   gml_pragma("forceinline");
-  self.pool = new UeParticlePool(maxParticles);
-  self.pool.emitter = self;
+  self.maxParticles = maxParticles;
+  self.vformat = global.UE_PARTICLE_RENDER_FORMAT;
+  self.vsize = 52; // 52 bytes per vertex (3*4 Pos + 4 Color + 2*4 Corner + 4*4 VelTime + 3*4 LifeSizeRot)
+  
+  // RAW Buffer persistent (CPU-side)
+  self.rawBuffer = buffer_create(maxParticles * 6 * self.vsize, buffer_fixed, 1);
+  buffer_fill(self.rawBuffer, 0, buffer_f32, 0, buffer_get_size(self.rawBuffer));
+  
+  self.vbuffer = undefined;
+  self.writePointer = 0; // Circular pointer
+  self.spawnedAny = false;
 
-  // Emission state
+  // Initial State
   self.streamType = undefined;
   self.streamRate = 0;
   self._accumulator = 0;
   self.enabled = true;
-
-  // LOD & Culling
-  self.lodDistances = [500, 1000]; // threshold distances for LOD
-  self.lodRates = [1.0, 0.5, 0.1]; // emission rate multipliers at each distance
-  self.lodSkips = [1, 2, 4]; // frames to skip at each LOD level (1=every other frame, etc)
-  self.lodLevel = 0; // Current index in the LOD arrays
-  self._skipCounter = 0;
-  self._dtAccumulator = 0;
-  self.cullingRadius = 100;
-  self.autoCullingRadius = true;
-  self.visible = true;
-
-  // Region/Shape
-  self.shape = "point"; // "point", "box", "sphere"
-  self.x1 = 0; self.y1 = 0; self.z1 = 0;
-  self.x2 = 0; self.y2 = 0; self.z2 = 0;
   self.centerX = 0; self.centerY = 0; self.centerZ = 0;
   self.sizeX = 0; self.sizeY = 0; self.sizeZ = 0;
+  self.shape = "point";
+  self.visible = true;
+  self.pool = { aliveCount: 0 }; 
 
-    /**
-     * Sets the region/shape of the emitter.
-     */
-    static region = function (shape, x1, y1, z1, x2, y2, z2) {
+  // LOD & Culling settings
+  self.lodDistances = [500, 1000];
+  self.lodRates = [1.0, 0.5, 0.1];
+  self.lodLevel = 0;
+  self.cullingRadius = 100;
+  self.autoCullingRadius = true;
+
+  /**
+   * Updates LOD level based on distance to camera.
+   */
+  static updateLOD = function(cx, cy, cz) {
     gml_pragma("forceinline");
-    self.shape = shape;
-    self.x1 = x1; self.y1 = y1; self.z1 = z1;
-    self.x2 = x2; self.y2 = y2; self.z2 = z2;
-    self.centerX = (x1 + x2) * 0.5;
-    self.centerY = (y1 + y2) * 0.5;
-    self.centerZ = (z1 + z2) * 0.5;
-    self.sizeX = abs(x2 - x1);
-    self.sizeY = abs(y2 - y1);
-    self.sizeZ = abs(z2 - z1);
-    if (self.autoCullingRadius) self.computeCullingRadius();
-    return self;
+    var dist = point_distance_3d(cx, cy, cz, self.centerX, self.centerY, self.centerZ);
+    var _dists = self.lodDistances;
+    
+    self.lodLevel = 0;
+    for (var i = 0, il = array_length(_dists); i < il; i++) {
+        if (dist > _dists[i]) {
+            self.lodLevel = i + 1;
+        } else {
+            break;
+        }
+    }
+    return self.lodLevel;
   }
 
-    /**
-     * Estimates the maximum radius particles can reach from the center.
-     */
-    static computeCullingRadius = function() {
-        gml_pragma("forceinline");
-        var type = self.streamType;
-        var baseR = max(self.sizeX, self.sizeY, self.sizeZ) * 0.5;
-        if (type == undefined) {
-            self.cullingRadius = baseR;
-            return self;
-        }
-
-        // Estimate max travel: (maxSpeed + 0.5 * maxIncr * maxLife) * maxLife
-        var maxLife = type.lifeMax;
-        var maxV = max(type.speedMax, type.zSpeedMax);
-        var maxIncr = max(type.speedIncr, type.zSpeedIncr);
-        var travel = (maxV + abs(maxIncr) * maxLife) * maxLife;
-        
-        // Add gravity effect roughly
-        var maxGrav = max(type.gravAmount, type.zGravAmount);
-        travel += 0.5 * maxGrav * maxLife * maxLife;
-
-        self.cullingRadius = baseR + travel;
+  /**
+   * Estimates the maximum radius particles can reach from the center.
+   */
+  static computeCullingRadius = function() {
+    gml_pragma("forceinline");
+    var type = self.streamType;
+    var baseR = max(self.sizeX, self.sizeY, self.sizeZ) * 0.5;
+    if (type == undefined) {
+        self.cullingRadius = baseR;
         return self;
     }
 
-    /**
-     * Updates LOD level based on distance to camera.
-     */
-    static updateLOD = function(cx, cy, cz) {
-        gml_pragma("forceinline");
-        var dist = point_distance_3d(cx, cy, cz, self.centerX, self.centerY, self.centerZ);
-        var _dists = self.lodDistances;
-        
-        self.lodLevel = 0;
-        for (var i = 0, il = array_length(_dists); i < il; i++) {
-            if (dist > _dists[i]) {
-                self.lodLevel = i + 1;
-            } else {
-                break;
-            }
-        }
-        return self.lodLevel;
-    }
+    // Analytical travel: (v0*t + 0.5*a*t^2)
+    var maxLife = type.lifeMax;
+    var maxV = max(abs(type.speedMax), abs(type.zSpeedMax));
+    var maxA = max(abs(type.gravAmount), abs(type.zGravAmount)); 
+    var travel = maxV * maxLife + 0.5 * maxA * maxLife * maxLife;
 
-    /**
-     * Sets the emitter to stream a specific type at a specific rate.
-     */
-    static stream = function (type, rate) {
-    gml_pragma("forceinline");
-    self.streamType = type;
-    self.streamRate = rate;
-    if (self.autoCullingRadius) self.computeCullingRadius();
+    self.cullingRadius = baseR + travel;
     return self;
   }
 
-    /**
-     * Bursts a specific number of particles of a given type.
-     */
-    static burst = function (type, count) {
-    gml_pragma("forceinline");
-    if (type == undefined || count <= 0) return self;
-    repeat(count) self.spawn(type);
+  static region = function (s, x1, y1, z1, x2, y2, z2) {
+    self.shape = s; self.centerX = (x1 + x2) * 0.5; self.centerY = (y1 + y2) * 0.5; self.centerZ = (z1 + z2) * 0.5;
+    self.sizeX = abs(x2 - x1); self.sizeY = abs(y2 - y1); self.sizeZ = abs(z2 - z1); 
+    self.computeCullingRadius();
     return self;
   }
 
-    /**
-     * Spawns a single particle of the given type.
-     */
-    static spawn = function (type) {
-    gml_pragma("forceinline");
+  static stream = function (t, r) { 
+    self.streamType = t; 
+    self.streamRate = r; 
+    self.computeCullingRadius();
+    return self; 
+  }
 
-    var p = self.pool;
-    var i = p.allocate();
-    if (i == -1) return -1;
-
-    // --- Spawn Position ---
-    var sx = self.centerX;
-    var sy = self.centerY;
-    var sz = self.centerZ;
-
+  /**
+  * Spawns a particle by writing 6 vertices into the circular buffer.
+  */
+  static spawn = function (type) {
+    var sx = self.centerX, sy = self.centerY, sz = self.centerZ;
     if (self.shape == "box") {
-      sx += random_range(-0.5, 0.5) * self.sizeX;
-      sy += random_range(-0.5, 0.5) * self.sizeY;
-      sz += random_range(-0.5, 0.5) * self.sizeZ;
-    } else if (self.shape == "sphere") {
-      var r = random(1.0) * self.sizeX * 0.5;
-      var phi = random(2 * pi);
-      var theta = random(pi);
-      var st = sin(theta);
-      sx += r * st * cos(phi);
-      sy += r * st * sin(phi);
-      sz += r * cos(theta);
+        sx += random_range(-0.5, 0.5) * self.sizeX; sy += random_range(-0.5, 0.5) * self.sizeY; sz += random_range(-0.5, 0.5) * self.sizeZ;
     }
-
-    p.posX[i] = sx;
-    p.posY[i] = sy;
-    p.posZ[i] = sz;
-
-    // --- Initialize from Type (Optimized with pre-calculated diffs) ---
+    var spd = random_range(type.speedMin, type.speedMax), dir = random_range(type.dirMin, type.dirMax);
+    var vx = cos(dir) * spd, vy = -sin(dir) * spd, vz = random_range(type.zSpeedMin, type.zSpeedMax);
     var life = random_range(type.lifeMin, type.lifeMax);
-    p.life[i] = life;
-    p.maxLife[i] = life;
+    var sS = random_range(type.sizeMin, type.sizeMax), rS = random_range(type.rotMin, type.rotMax);
+    var cs = (floor(type.alphaStart*255)<<24) | (floor(type.colorStart[2]*255)<<16) | (floor(type.colorStart[1]*255)<<8) | floor(type.colorStart[0]*255);
+    var st = current_time / 1000.0;
 
-    // Copy Feature Flags
-    p.hasWiggle[i] = type.hasWiggle;
-    p.hasGravity[i] = type.hasGravity;
-    p.hasColorOverLife[i] = type.hasColorOverLife;
-    p.hasAlphaOverLife[i] = type.hasAlphaOverLife;
-    p.hasSizeOverLife[i] = type.hasSizeOverLife;
-    p.hasRotation[i] = type.hasRotation;
-    p.hasPhysics[i] = type.hasPhysics;
-
-    var size = random_range(type.sizeMin, type.sizeMax);
-    p.size[i] = size;
-    p.baseSize[i] = size;
-    p.diffSize[i] = type.sizeIncr * life;
-
-    p.speed[i] = random_range(type.speedMin, type.speedMax);
-    p.speedIncr[i] = type.speedIncr;
-    p.speedWiggle[i] = type.speedWiggle;
-
-    p.zSpeed[i] = random_range(type.zSpeedMin, type.zSpeedMax);
-    p.zSpeedIncr[i] = type.zSpeedIncr;
-    p.zSpeedWiggle[i] = type.zSpeedWiggle;
-
-    var dir = random_range(type.dirMin, type.dirMax);
-    p.direction[i] = dir;
-    p.dirIncr[i] = type.dirIncr;
-    p.dirWiggle[i] = type.dirWiggle;
-    p.dirX[i] = cos(dir);
-    p.dirY[i] = -sin(dir);
-
-    p.velX[i] = 0;
-    p.velY[i] = 0;
-    p.velZ[i] = 0;
-
-    p.sizeWiggle[i] = type.sizeWiggle;
-    p.grav[i] = type.gravAmount;
-    p.gravDir[i] = type.gravDir;
-    p.gravX[i] = type.gravX;
-    p.gravY[i] = type.gravY;
-    p.zGrav[i] = type.zGravAmount;
-
-    p.baseColorR[i] = type.colorStart[0];
-    p.baseColorG[i] = type.colorStart[1];
-    p.baseColorB[i] = type.colorStart[2];
-    p.diffColorR[i] = type.colorEnd[0] - type.colorStart[0];
-    p.diffColorG[i] = type.colorEnd[1] - type.colorStart[1];
-    p.diffColorB[i] = type.colorEnd[2] - type.colorStart[2];
-    p.colorR[i] = p.baseColorR[i];
-    p.colorG[i] = p.baseColorG[i];
-    p.colorB[i] = p.baseColorB[i];
-
-    p.baseAlpha[i] = type.alphaStart;
-    p.diffAlpha[i] = type.alphaEnd - type.alphaStart;
-    p.alpha[i] = p.baseAlpha[i];
-
-    p.rot[i] = random_range(type.rotMin, type.rotMax);
-    p.rotIncr[i] = type.rotIncr;
-    p.rotWiggle[i] = type.rotWiggle;
-
-    return i;
+    // --- Circular Write (O(1)) ---
+    var b = self.rawBuffer;
+    var offset = self.writePointer * 6 * self.vsize;
+    buffer_seek(b, buffer_seek_start, offset);
+    
+    // Corners: TL, TR, BL, BL, TR, BR (Triangle List 6 verts)
+    static cornersX = [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5];
+    static cornersY = [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5];
+    
+    for (var c = 0; c < 6; c++) {
+        buffer_write(b, buffer_f32, sx); buffer_write(b, buffer_f32, sy); buffer_write(b, buffer_f32, sz);
+        buffer_write(b, buffer_u32, cs);
+        buffer_write(b, buffer_f32, cornersX[c]); buffer_write(b, buffer_f32, cornersY[c]);
+        buffer_write(b, buffer_f32, vx); buffer_write(b, buffer_f32, vy); buffer_write(b, buffer_f32, vz); buffer_write(b, buffer_f32, st);
+        buffer_write(b, buffer_f32, life); buffer_write(b, buffer_f32, sS); buffer_write(b, buffer_f32, rS);
+    }
+    
+    self.writePointer = (self.writePointer + 1) % self.maxParticles;
+    self.spawnedAny = true;
+    self.pool.aliveCount = self.maxParticles; 
   }
 
-    /**
-     * Updates the emitter logic and all its particles.
-     */
-    static update = function (dt) {
-    gml_pragma("forceinline");
-
-    // --- Update Skipping Logic (LOD) ---
-    var skipMax = self.lodSkips[self.lodLevel];
-    if (skipMax > 0) {
-        self._dtAccumulator += dt;
-        if (++self._skipCounter <= skipMax) return;
-        
-        // Time to update
-        dt = self._dtAccumulator;
-        self._skipCounter = 0;
-        self._dtAccumulator = 0;
-    }
-
-    // 1. Emission (Adjusted by LOD)
+  static update = function (dt) {
     if (self.enabled && self.streamType != undefined && self.streamRate > 0) {
       self._accumulator += dt * self.streamRate * self.lodRates[self.lodLevel];
-      while (self._accumulator >= 1) {
-        self.spawn(self.streamType);
-        self._accumulator--;
-      }
+      while (self._accumulator >= 1) { self.spawn(self.streamType); self._accumulator--; }
     }
+  }
 
-    // 2. Particle Lifecycle & Logic
-    var p = self.pool;
-    var count = p.aliveCount;
-    if (count <= 0) return;
-
-    var type = self.streamType;
-    // Early-out if emitter is completely static and no emission is happening
-    if (type != undefined && !type.hasPhysics && !type.hasWiggle && !type.hasColorOverLife && !type.hasAlphaOverLife && !type.hasSizeOverLife && !type.hasRotation) {
-        // Only update life
-        var i = 0, _active = p.activeIndices, _life = p.life;
-        while (i < count) {
-            var idx = _active[i];
-            _life[idx] -= dt;
-            if (_life[idx] <= 0) { p.free(i); count--; continue; }
-            i++;
-        }
-        return;
+  static render = function (camera) {
+    if (self.spawnedAny) {
+        if (self.vbuffer != undefined) vertex_delete_buffer(self.vbuffer);
+        self.vbuffer = vertex_create_buffer_from_buffer(self.rawBuffer, self.vformat);
+        vertex_freeze(self.vbuffer);
+        self.spawnedAny = false;
     }
-
-    var i = 0;
-    var _active = p.activeIndices;
-
-    // --- Array Reference Caching ---
-    var _life = p.life;
-    var _maxLife = p.maxLife;
-    var _posX = p.posX;
-    var _posY = p.posY;
-    var _posZ = p.posZ;
-    var _velX = p.velX;
-    var _velY = p.velY;
-    var _velZ = p.velZ;
-    var _speed = p.speed;
-    var _zSpeed = p.zSpeed;
-    var _direction = p.direction;
-    var _dirX = p.dirX;
-    var _dirY = p.dirY;
-    var _rot = p.rot;
-    var _size = p.size;
-    var _alpha = p.alpha;
-    var _colorR = p.colorR;
-    var _colorG = p.colorG;
-    var _colorB = p.colorB;
-
-    // Read-only arrays for interpolation
-    var _baseSize = p.baseSize;
-    var _diffSize = p.diffSize;
-    var _baseAlpha = p.baseAlpha;
-    var _diffAlpha = p.diffAlpha;
-    var _baseColorR = p.baseColorR;
-    var _diffColorR = p.diffColorR;
-    var _baseColorG = p.baseColorG;
-    var _diffColorG = p.diffColorG;
-    var _baseColorB = p.baseColorB;
-    var _diffColorB = p.diffColorB;
-
-    // Physics/Incr arrays
-    var _speedIncr = p.speedIncr;
-    var _zSpeedIncr = p.zSpeedIncr;
-    var _dirIncr = p.dirIncr;
-    var _rotIncr = p.rotIncr;
-    var _gravX = p.gravX;
-    var _gravY = p.gravY;
-    var _zGrav = p.zGrav;
-
-    // Wiggle arrays
-    var _speedWiggle = p.speedWiggle;
-    var _zSpeedWiggle = p.zSpeedWiggle;
-    var _dirWiggle = p.dirWiggle;
-    var _rotWiggle = p.rotWiggle;
-    var _sizeWiggle = p.sizeWiggle;
-
-    // Emitter-level flags (Share flags from type to avoid per-particle branching)
-    var fWiggle = type.hasWiggle;
-    var fPhysics = type.hasPhysics;
-    var fColor = type.hasColorOverLife;
-    var fAlpha = type.hasAlphaOverLife;
-    var fSize = type.hasSizeOverLife;
-    var fRot = type.hasRotation;
-
-    while (i < count) {
-      var idx = _active[i];
-
-      // Life Update
-      var life = _life[idx] - dt;
-      if (life <= 0) {
-        p.free(i);
-        count--;
-        continue;
-      }
-      _life[idx] = life;
-
-      var nAge = 1.0 - (life / _maxLife[idx]); // Normalized age (0 to 1)
-
-      // --- Physics & Movement ---
-      if (fPhysics) {
-        _speed[idx] += _speedIncr[idx] * dt;
-        _zSpeed[idx] += _zSpeedIncr[idx] * dt;
-
-        var dir = _direction[idx];
-        var dirIncr = _dirIncr[idx];
-
-        // Wiggle (Batch Random)
-        if (fWiggle) {
-          var r1 = random_range(-1.0, 1.0);
-          var r2 = random_range(-1.0, 1.0);
-
-          if (_speedWiggle[idx] != 0) _speed[idx] += r1 * _speedWiggle[idx] * dt;
-          if (_zSpeedWiggle[idx] != 0) _zSpeed[idx] += r2 * _zSpeedWiggle[idx] * dt;
-          if (_dirWiggle[idx] != 0) {
-            dir += r1 * _dirWiggle[idx] * dt;
-            _direction[idx] = dir;
-            _dirX[idx] = cos(dir);
-            _dirY[idx] = -sin(dir);
-          }
-          if (_rotWiggle[idx] != 0) _rot[idx] += r2 * _rotWiggle[idx] * dt;
-        }
-
-        if (dirIncr != 0) {
-          dir += dirIncr * dt;
-          _direction[idx] = dir;
-          _dirX[idx] = cos(dir);
-          _dirY[idx] = -sin(dir);
-        }
-
-        // Velocity & Gravity
-        _velX[idx] += _gravX[idx] * dt;
-        _velY[idx] += _gravY[idx] * dt;
-        _velZ[idx] += _zGrav[idx] * dt;
-
-        // Position
-        _posX[idx] += (_dirX[idx] * _speed[idx] + _velX[idx]) * dt;
-        _posY[idx] += (_dirY[idx] * _speed[idx] + _velY[idx]) * dt;
-        _posZ[idx] += (_zSpeed[idx] + _velZ[idx]) * dt;
-      } else {
-        // Static movement if no complex physics
-        _posX[idx] += _velX[idx] * dt;
-        _posY[idx] += _velY[idx] * dt;
-        _posZ[idx] += _velZ[idx] * dt;
-      }
-
-      // Rotation
-      if (fRot) {
-        _rot[idx] += _rotIncr[idx] * dt;
-      }
-
-      // --- Visual Interpolation & Quantization ---
-      if (fSize) {
-        var size = _baseSize[idx] + _diffSize[idx] * nAge;
-        if (_sizeWiggle[idx] != 0) size += random_range(-1.0, 1.0) * _sizeWiggle[idx];
-        // Quantize size to avoid tiny CPU->GPU jitter
-        _size[idx] = floor(size * 256.0) * 0.00390625;
-      }
-
-      if (fAlpha) {
-        var alpha = _baseAlpha[idx] + _diffAlpha[idx] * nAge;
-        _alpha[idx] = floor(alpha * 256.0) * 0.00390625;
-      }
-
-      if (fColor) {
-        _colorR[idx] = _baseColorR[idx] + _diffColorR[idx] * nAge;
-        _colorG[idx] = _baseColorG[idx] + _diffColorG[idx] * nAge;
-        _colorB[idx] = _baseColorB[idx] + _diffColorB[idx] * nAge;
-      }
-
-      i++;
-    }
+    if (self.vbuffer == undefined || self.streamType == undefined) return;
+    global.UE_PARTICLE_RENDERER.submit(self, camera, self.streamType);
   }
 }
