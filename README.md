@@ -9,7 +9,7 @@ Unique Particles is a state-of-the-art particle system that offloads 100% of par
 
 ## 📊 Performance Pillars
 
-The engine is built on four core architectural pillars:
+The engine is built on six core architectural pillars:
 
 1. **Analytical GPU Trajectory**: The CPU never calculates positions. It only writes "Birth Data" (Spawn Time, Initial Velocity, etc.) to a buffer. The Vertex Shader solves the motion equation `p = p0 + v0*t + 0.5*a*t^2` in real-time.
 2. **Circular Persistent Buffers**: Instead of rebuilding the vertex buffer every frame, the system uses a circular pool. For each particle, GML writes 6 vertices **only once** at spawn. From that point on, the GPU takes over.
