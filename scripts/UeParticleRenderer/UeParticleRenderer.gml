@@ -1,4 +1,4 @@
-global.UE_PARTICLE_VERSION = "1.0.0";
+global.UE_PARTICLE_VERSION = "1.1.0";
 global.UE_PARTICLE_RENDER_FORMAT = undefined;
 
 /**
