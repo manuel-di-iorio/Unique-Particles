@@ -39,7 +39,7 @@ The engine is built on six core architectural pillars:
 -   **`.setSize(min, max, [incr], [wiggle])`**: Initial size and transformation over time.
 -   **`.setScale(sx, sy)`**: **(v1.1)** Set aspect ratio for the particle quad.
 -   **`.setSpeed(zMin, zMax, [xyMin], [xyMax], [zIncr], [xyIncr], [zWiggle], [xyWiggle])`**: Initial velocity and acceleration (supports 3D).
--   **`.setDrag(value)`**: **(v1.1)** Air resistance (0-1). Slows down particles over time.
+-   **`.setDrag(value)`**: Air resistance (0-1). Slows down particles over time.
 -   **`.setDirection(min, max, [incr], [wiggle])`**: Movement direction in degrees.
 -   **`.setGravity(amountZ, [amountXY], [dirXY])`**: Constant gravity applied to particles.
 -   **`.setColor(color1, [color2])`**: Start and end color (interpolation handled by GPU).
