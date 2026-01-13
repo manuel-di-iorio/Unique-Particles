@@ -84,6 +84,7 @@ function UeParticleSystem() constructor {
         }
         renderer.render(emitter.pool, camera, tex, uvs);
       }
+      renderer.flush();
     }
 
     // Additive batch render 
@@ -100,6 +101,7 @@ function UeParticleSystem() constructor {
         }
         renderer.render(emitter.pool, camera, tex, uvs);
       }
+      renderer.flush();
     }
 
     gpu_set_blendmode(_bm);

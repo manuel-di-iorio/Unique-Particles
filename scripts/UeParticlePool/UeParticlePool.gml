@@ -115,6 +115,54 @@ function UeParticlePool(maxCount) constructor {
   */ 
   static getIndex = function (activeIndex) {
     gml_pragma("forceinline");
-    return self.activeIndexes[activeIndex];
+    return self.activeIndices[activeIndex];
+  }
+
+  /**
+   * Sort particles back-to-front based on distance to a point (usually camera)
+   */
+  static depthSort = function(_camX, _camY, _camZ) {
+    var _count = self.aliveCount;
+    if (_count <= 1) return;
+    
+    // Ensure the size of the global distance array
+    if (array_length(global.__ue_sort_dist) < self.maxCount) {
+        global.__ue_sort_dist = array_create(self.maxCount, 0);
+    }
+    
+    // Shared temp array for indices to avoid per-frame allocation
+    if (array_length(global.__ue_sort_indices) < _count) {
+        global.__ue_sort_indices = array_create(self.maxCount, 0);
+    }
+    
+    var _active = self.activeIndices;
+    var _px = self.posX;
+    var _py = self.posY;
+    var _pz = self.posZ;
+    var _dists = global.__ue_sort_dist;
+    var _indices = global.__ue_sort_indices;
+    
+    for (var i = 0; i < _count; i++) {
+        var _idx = _active[i];
+        var _dx = _px[_idx] - _camX;
+        var _dy = _py[_idx] - _camY;
+        var _dz = _pz[_idx] - _camZ;
+        _dists[_idx] = _dx*_dx + _dy*_dy + _dz*_dz;
+        _indices[i] = _idx;
+    }
+    
+    // Sort the temporary index list
+    var _subset = array_create(_count);
+    array_copy(_subset, 0, _indices, 0, _count);
+    
+    array_sort(_subset, function(_a, _b) {
+        return global.__ue_sort_dist[_b] - global.__ue_sort_dist[_a];
+    });
+    
+    // Copy back to activeIndices (the first 'count' elements)
+    array_copy(_active, 0, _subset, 0, _count);
   }
 }
+
+global.__ue_sort_dist = array_create(8192, 0);
+global.__ue_sort_indices = array_create(8192, 0);

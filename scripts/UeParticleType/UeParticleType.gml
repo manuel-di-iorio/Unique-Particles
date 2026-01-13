@@ -73,6 +73,8 @@ function UeParticleType() constructor {
     self.gravX = 0.0;
     self.gravY = 0.0;
 
+    self.setShape("sphere");
+
     /**
      * Re-calculates feature flags and diffs to optimize update loop and spawning.
      */
@@ -197,6 +199,20 @@ function UeParticleType() constructor {
             self.texture = sprite_get_texture(sprite, subimg);
             var _uvs = sprite_get_uvs(sprite, subimg);
             self.uvs = [_uvs[0], _uvs[1], _uvs[2] - _uvs[0], _uvs[3] - _uvs[1]];
+        }
+        return self;
+    }
+
+    /**
+     * Set a procedural shape from the global renderer.
+     * @param {string} shapeName "point", "sphere", "flare", "square", "box", "disk", "ring"
+     */
+    static setShape = function(shapeName) {
+        gml_pragma("forceinline");
+        var _shape = global.UE_PARTICLE_RENDERER.shapes[$ shapeName];
+        if (_shape != undefined) {
+            self.texture = _shape.texture;
+            self.uvs = _shape.uvs;
         }
         return self;
     }
