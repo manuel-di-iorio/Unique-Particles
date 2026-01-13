@@ -16,6 +16,9 @@ The system was designed with a zero-overhead approach. Here are the key optimiza
 - **Pre-calculated Trigonometry**: Massive use of radians and pre-calculated vectors to avoid `dsin`/`dcos` during position updates.
 - **Batch Rendering**: Emitters are grouped by Blend Mode to minimize GPU state changes.
 - **View Matrix Caching**: 3D billboarding optimization through view matrix caching.
+- **Distance-based LOD**: Automatic reduction of emission rates and update frequency based on distance to camera.
+- **Update Skipping**: Far away emitters skip animation frames but accumulate delta time to save CPU without losing positional accuracy.
+- **Native Frustum Culling**: Automatic skipping of invisible emitters using `sphere_is_visible`.
 - **Forceinline**: Systematic use of `gml_pragma("forceinline")` to eliminate function call overhead.
 
 ---
@@ -26,9 +29,9 @@ The system is divided into 5 core components:
 
 1. **[UeParticleType](scripts/UeParticleType/UeParticleType.gml)**: Defines *how* a particle appears and behaves (color, velocity, gravity, etc.). Uses a Fluent API for quick configuration.
 2. **[UeParticlePool](scripts/UeParticlePool/UeParticlePool.gml)**: The data container. Uses a **SoA (Structure of Arrays)** structure to maximize data locality and cache performance.
-3. **[UeParticleEmitter](scripts/UeParticleEmitter/UeParticleEmitter.gml)**: Manages the spawning of particles in specific shapes (Box, Sphere) and the updating of their logic.
+3. **[UeParticleEmitter](scripts/UeParticleEmitter/UeParticleEmitter.gml)**: Manages the spawning of particles in specific shapes (Box, Sphere), LOD logic, and visibility tracking.
 4. **[UeParticleRenderer](scripts/UeParticleRenderer/UeParticleRenderer.gml)**: Manages the vertex buffer and shader. Implements ultra-fast 3D billboarding.
-5. **[UeParticleSystem](scripts/UeParticleSystem/UeParticleSystem.gml)**: The high-level manager that coordinates the updating and drawing of multiple emitters.
+5. **[UeParticleSystem](scripts/UeParticleSystem/UeParticleSystem.gml)**: The high-level manager that coordinates the updating and drawing, managing global visibility and LOD updates.
 
 ---
 
@@ -60,10 +63,34 @@ myEmitter.stream(fireType, 10); // Spawn 10 particles per second
 ### 3. Update and Draw
 ```gml
 // Step Event
-mySystem.update();
+// Pass camera position for automatic LOD calculation
+mySystem.update(delta_time / 1000000, camX, camY, camZ);
 
-// Draw Event (or Draw GUI)
+// Draw Event
+// Automatically performs Frustum Culling for all emitters
 mySystem.render();
+```
+
+---
+
+## 📈 Optimization Features
+
+### Distance LOD (Level of Detail)
+Emitters can automatically scale their emission rate based on distance to the camera.
+```gml
+emitter.lodDistances = [500, 1000]; // Pixels
+emitter.lodRates = [1.0, 0.5, 0.1]; // 100% rate, 50% rate, 10% rate
+emitter.lodSkips = [0, 1, 3]; // Skip 0 frames, skip 1 frame, skip 3 frames
+```
+
+### Update Skipping
+When an emitter skips an update, it accumulates the `delta_time`. When it finally updates, it processes the movement for the entire elapsed time. This saves CPU while keeping the average movement correct.
+
+### Frustum Culling
+The system uses GameMaker's native `sphere_is_visible` to cull entire emitters before processing. The culling radius is automatically estimated based on particle speed, life, and gravity, but can be set manually:
+```gml
+emitter.autoCullingRadius = false;
+emitter.cullingRadius = 250;
 ```
 
 ---

@@ -3,10 +3,10 @@ particleSystem = new UeParticleSystem();
 // --- Smoke Type ---
 smokeType = new UeParticleType()
     .setLife(2.5, 4.0)
-    .setSpeed(30, 70, 5, 20, -2)
+    .setSpeed(30, 50, 3, 20, -2)
     .setDirection(0, 360, 0, 40)
     .setSize(50, 100, 50)
-    .setRotation(0, 360, 30, 10)
+    .setRotation(0, 360, 30, 5)
     .setColor(#333333, #111111)
     .setAlpha(0.3, 0.0); // Much lower alpha to avoid covering fire
 
@@ -30,20 +30,6 @@ fireEmitter = new UeParticleEmitter(1500);
 fireEmitter.region("box", -15, -15, 0, 15, 15, 5);
 fireEmitter.stream(fireType, 550);
 
-// --- Fire Core ---
-fireCoreType = new UeParticleType()
-    .setLife(0.1, 0.2)
-    .setSpeed(220, 380, 0, 0, 0, 0, 60, 0)
-    .setSize(30, 55, -45, 15)
-    .setRotation(0, 360, 700, 300)
-    .setColor(#FFFFFF, #FFEE00)
-    .setAlpha(1.0, 0.0)
-    .setAdditive(true);
-
-fireCoreEmitter = new UeParticleEmitter(1000);
-fireCoreEmitter.region("point", 0, 0, 0, 0, 0, 2);
-fireCoreEmitter.stream(fireCoreType, 400);
-
 // --- Embers ---
 emberType = new UeParticleType()
     .setLife(1.2, 2.5)
@@ -62,7 +48,6 @@ emberEmitter.stream(emberType, 60);
 // ADD EMITTERS (Order matters for drawing: Smoke first, then Fire on top)
 particleSystem.addEmitter(smokeEmitter);
 particleSystem.addEmitter(fireEmitter);
-particleSystem.addEmitter(fireCoreEmitter);
 particleSystem.addEmitter(emberEmitter);
 
 // --- Camera 3D Test ---

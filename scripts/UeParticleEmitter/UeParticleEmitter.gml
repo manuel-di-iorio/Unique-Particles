@@ -12,6 +12,17 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
   self._accumulator = 0;
   self.enabled = true;
 
+  // LOD & Culling
+  self.lodDistances = [500, 1000]; // threshold distances for LOD
+  self.lodRates = [1.0, 0.5, 0.1]; // emission rate multipliers at each distance
+  self.lodSkips = [0, 1, 2]; // frames to skip at each LOD level (0=none, 1=every other frame, etc)
+  self.lodLevel = 0; // Current index in the LOD arrays
+  self._skipCounter = 0;
+  self._dtAccumulator = 0;
+  self.cullingRadius = 100;
+  self.autoCullingRadius = true;
+  self.visible = true;
+
   // Region/Shape
   self.shape = "point"; // "point", "box", "sphere"
   self.x1 = 0; self.y1 = 0; self.z1 = 0;
@@ -33,8 +44,54 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     self.sizeX = abs(x2 - x1);
     self.sizeY = abs(y2 - y1);
     self.sizeZ = abs(z2 - z1);
+    if (self.autoCullingRadius) self.computeCullingRadius();
     return self;
   }
+
+    /**
+     * Estimates the maximum radius particles can reach from the center.
+     */
+    static computeCullingRadius = function() {
+        gml_pragma("forceinline");
+        var type = self.streamType;
+        var baseR = max(self.sizeX, self.sizeY, self.sizeZ) * 0.5;
+        if (type == undefined) {
+            self.cullingRadius = baseR;
+            return self;
+        }
+
+        // Estimate max travel: (maxSpeed + 0.5 * maxIncr * maxLife) * maxLife
+        var maxLife = type.lifeMax;
+        var maxV = max(type.speedMax, type.zSpeedMax);
+        var maxIncr = max(type.speedIncr, type.zSpeedIncr);
+        var travel = (maxV + abs(maxIncr) * maxLife) * maxLife;
+        
+        // Add gravity effect roughly
+        var maxGrav = max(type.gravAmount, type.zGravAmount);
+        travel += 0.5 * maxGrav * maxLife * maxLife;
+
+        self.cullingRadius = baseR + travel;
+        return self;
+    }
+
+    /**
+     * Updates LOD level based on distance to camera.
+     */
+    static updateLOD = function(cx, cy, cz) {
+        gml_pragma("forceinline");
+        var dist = point_distance_3d(cx, cy, cz, self.centerX, self.centerY, self.centerZ);
+        var _dists = self.lodDistances;
+        
+        self.lodLevel = 0;
+        for (var i = 0, il = array_length(_dists); i < il; i++) {
+            if (dist > _dists[i]) {
+                self.lodLevel = i + 1;
+            } else {
+                break;
+            }
+        }
+        return self.lodLevel;
+    }
 
     /**
      * Sets the emitter to stream a specific type at a specific rate.
@@ -43,6 +100,7 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     gml_pragma("forceinline");
     self.streamType = type;
     self.streamRate = rate;
+    if (self.autoCullingRadius) self.computeCullingRadius();
     return self;
   }
 
@@ -170,6 +228,18 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
     static update = function (dt) {
     gml_pragma("forceinline");
 
+    // --- Update Skipping Logic (LOD) ---
+    var skipMax = self.lodSkips[self.lodLevel];
+    if (skipMax > 0) {
+        self._dtAccumulator += dt;
+        if (++self._skipCounter <= skipMax) return;
+        
+        // Time to update
+        dt = self._dtAccumulator;
+        self._skipCounter = 0;
+        self._dtAccumulator = 0;
+    }
+
         // --- 0. Batch Random Generation (Static Table) ---
         static randomTableSize = 1024;
         static randomTable = undefined;
@@ -179,9 +249,9 @@ function UeParticleEmitter(maxParticles = 1000) constructor {
       for (var _r = 0; _r < randomTableSize; _r++) randomTable[_r] = random(2.0) - 1.0;
     }
 
-    // 1. Emission
+    // 1. Emission (Adjusted by LOD)
     if (self.enabled && self.streamType != undefined && self.streamRate > 0) {
-      self._accumulator += dt * self.streamRate;
+      self._accumulator += dt * self.streamRate * self.lodRates[self.lodLevel];
       while (self._accumulator >= 1) {
         self.spawn(self.streamType);
         self._accumulator--;

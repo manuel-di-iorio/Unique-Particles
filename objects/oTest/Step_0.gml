@@ -20,4 +20,4 @@ var viewMat = matrix_build_lookat(cx, cy, cz, 0, 0, 0, 0, 0, -1);
 camera_set_view_mat(view_camera[0], viewMat);
 
 // Update Particle System
-particleSystem.update(delta_time / 1000000);
+particleSystem.update(delta_time / 1000000, cx, cy, cz);

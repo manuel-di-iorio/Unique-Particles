@@ -8,6 +8,10 @@ function UeParticleSystem() constructor {
   self.renderer = global.UE_PARTICLE_RENDERER;
   self.enabled = true;
 
+  // LOD & Culling settings
+  self.lodEnabled = true;
+  self.frustumCulling = true;
+
   /** 
   * Adds an emitter to the system. 
   */ 
@@ -19,8 +23,12 @@ function UeParticleSystem() constructor {
 
   /** 
   * Updates all emitters in the system. 
+  * @param {real} dt Delta time in seconds.
+  * @param {real} cx Camera X (optional, for LOD).
+  * @param {real} cy Camera Y (optional, for LOD).
+  * @param {real} cz Camera Z (optional, for LOD).
   */ 
-  static update = function (dt = undefined) {
+  static update = function (dt = undefined, cx = undefined, cy = undefined, cz = undefined) {
     gml_pragma("forceinline");
     if (!self.enabled) return;
 
@@ -35,8 +43,13 @@ function UeParticleSystem() constructor {
       dt = _dtCache;
     }
 
-    for (var i = 0, il = array_length(self.emitters); i < il; i++) {
-      self.emitters[i].update(dt);
+    var emitters = self.emitters;
+    var lod = self.lodEnabled && (cx != undefined);
+
+    for (var i = 0, il = array_length(emitters); i < il; i++) {
+      var emitter = emitters[i];
+      if (lod) emitter.updateLOD(cx, cy, cz);
+      emitter.update(dt);
     }
   }
 
@@ -55,9 +68,19 @@ function UeParticleSystem() constructor {
     var additiveCount = 0;
 
     var emitters = self.emitters;
+    var culling = self.frustumCulling;
+
     for (var i = 0, il = array_length(emitters); i < il; i++) {
       var emitter = emitters[i];
-      if (emitter.pool.aliveCount > 0) {
+      
+      // Perform Frustum Culling 
+      if (culling) {
+          emitter.visible = sphere_is_visible(emitter.centerX, emitter.centerY, emitter.centerZ, emitter.cullingRadius);
+      } else {
+          emitter.visible = true;
+      }
+
+      if (emitter.visible && emitter.pool.aliveCount > 0) {
         var type = emitter.streamType;
         if (type != undefined && type.additive) {
           additiveEmitters[additiveCount++] = emitter;
