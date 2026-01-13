@@ -1,3 +1,5 @@
+global.UE_PARTICLE_RENDERER_VERSION = "0.0.1";
+
 /**
  * @description Efficient renderer for particle systems using vertex batching and a dedicated shader.
  */

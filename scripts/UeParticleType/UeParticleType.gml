@@ -119,22 +119,18 @@ function UeParticleType() constructor {
         return self;
     }
     
-    static setSpeed = function(minVal, maxVal, incr = 0, wiggle = 0) {
+    static setSpeed = function(zMin, zMax, xyMin = 0, xyMax = 0, zIncr = 0, xyIncr = 0, zWiggle = 0, xyWiggle = 0) {
         gml_pragma("forceinline");
-        self.speedMin = minVal;
-        self.speedMax = maxVal;
-        self.speedIncr = incr;
-        self.speedWiggle = wiggle;
-        self.updateFlags();
-        return self;
-    }
-    
-    static setSpeedZ = function(minVal, maxVal, incr = 0, wiggle = 0) {
-        gml_pragma("forceinline");
-        self.zSpeedMin = minVal;
-        self.zSpeedMax = maxVal;
-        self.zSpeedIncr = incr;
-        self.zSpeedWiggle = wiggle;
+        self.zSpeedMin = zMin;
+        self.zSpeedMax = zMax;
+        self.zSpeedIncr = zIncr;
+        self.zSpeedWiggle = zWiggle;
+        
+        self.speedMin = xyMin;
+        self.speedMax = xyMax;
+        self.speedIncr = xyIncr;
+        self.speedWiggle = xyWiggle;
+        
         self.updateFlags();
         return self;
     }
@@ -149,17 +145,11 @@ function UeParticleType() constructor {
         return self;
     }
     
-    static setGravity = function(amount, dir) {
+    static setGravity = function(amountZ, amountXY = 0, dirXY = 270) {
         gml_pragma("forceinline");
-        self.gravAmount = amount;
-        self.gravDir = degtorad(dir);
-        self.updateFlags();
-        return self;
-    }
-    
-    static setGravityZ = function(amount) {
-        gml_pragma("forceinline");
-        self.zGravAmount = amount;
+        self.zGravAmount = amountZ;
+        self.gravAmount = amountXY;
+        self.gravDir = degtorad(dirXY);
         self.updateFlags();
         return self;
     }
